@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Premium SweetAlert2 Styles */
+.premium-swal-popup {
+    border-radius: 16px !important;
+    padding: 2rem !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+.premium-swal-title {
+    font-family: 'Outfit', sans-serif !important;
+    font-weight: 700 !important;
+    color: #003287 !important;
+}
+
+.premium-swal-confirm {
+    padding: 12px 30px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+}
+
+.premium-swal-cancel {
+    padding: 12px 30px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+}
