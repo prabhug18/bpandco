@@ -604,18 +604,30 @@ const printReport = () => { window.print(); };
         box-shadow: none !important;
         border: none !important;
         width: 100% !important;
+        zoom: 0.7; /* Increased scaling to fit all columns */
     }
 
     .excel-table {
         width: 100% !important;
         table-layout: auto !important;
-        font-size: 8pt !important;
+        font-size: 7pt !important;
         border: 2px solid #000 !important;
     }
 
     .excel-table th, .excel-table td {
         border: 1px solid #000 !important;
-        padding: 4px 2px !important;
+        padding: 2px 1px !important;
+    }
+
+    .metric-col {
+        width: 120px !important;
+        font-size: 7pt !important;
+    }
+
+    .target-legend {
+        font-size: 5pt !important;
+        line-height: 1 !important;
+        max-width: 80px !important;
     }
 
     /* Ensure background colors show up */
