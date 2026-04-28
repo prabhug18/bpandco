@@ -10,7 +10,7 @@ const props = defineProps({
 });
 
 const visibleMetrics = computed(() => {
-    return props.metrics.filter(m => !['duty_time', 'late'].includes(m.key));
+    return props.metrics.filter(m => !['duty_time'].includes(m.key));
 });
 
 const activeRole = ref(props.roles.length > 0 ? props.roles[0].id : null);
@@ -195,7 +195,7 @@ const getScoringType = (id) => {
                                                 'bg-secondary': dt.tier_label === 'grey'
                                               }" style="font-size: 0.6rem;">&nbsp;</span>
                                         <span class="font-monospace text-dark">
-                                            Value <span class="text-primary fw-bold">&ge; {{ dt.min_value }}</span> = <span class="badge bg-success shadow-sm fs-6 px-3">{{ dt.daily_points }} pts</span>
+                                            Value <span class="text-primary fw-bold" v-html="props.metrics.find(m => m.id === activeTab).comparison_type === 'lte' ? '&le;' : '&ge;'"></span> {{ dt.min_value }} = <span class="badge bg-success shadow-sm fs-6 px-3">{{ dt.daily_points }} pts</span>
                                         </span>
                                     </div>
                                     <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="deleteDailyTier(dt.id)">
@@ -262,7 +262,7 @@ const getScoringType = (id) => {
                                                 'bg-secondary': pt.tier_label === 'grey'
                                               }">{{ pt.tier_label.toUpperCase() }}</span>
                                         <strong class="text-muted font-monospace me-2">[{{ pt.period_type.replace('_', ' ').toUpperCase() }}]</strong>
-                                        <span class="text-dark">Val: <strong class="text-primary">{{ pt.min_value }}</strong> &rarr; <span class="badge bg-dark fs-6">{{ pt.points_awarded }} pts</span></span>
+                                        <span class="text-dark">Val {{ props.metrics.find(m => m.id === activeTab).comparison_type === 'lte' ? '≤' : ':' }} <strong class="text-primary">{{ pt.min_value }}</strong> &rarr; <span class="badge bg-dark fs-6">{{ pt.points_awarded }} pts</span></span>
                                     </span>
                                     <button class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="deletePeriodTarget(pt.id)">
                                         <i class="bi bi-trash"></i>

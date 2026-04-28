@@ -50,36 +50,64 @@ class CalculateScores extends Command
         if ($dayOfMonth >= 20) $periodsToCalculate[] = ['type' => '20_days', 'start' => $monthStart, 'end' => $monthStart->copy()->addDays(19)];
         if ($dayOfMonth >= 30) $periodsToCalculate[] = ['type' => '30_days', 'start' => $monthStart, 'end' => $monthEnd];
 
+        $userRoleId = $user->roles->first()?->id;
+
         foreach ($metrics as $metric) {
             $slipsForMetric = $approvedSlips->get($metric->id, collect());
+            $slipsForRef    = $metric->reference_metric_id ? $approvedSlips->get($metric->reference_metric_id, collect()) : collect();
+
+            $sortOrder = ($metric->comparison_type === 'lte') ? 'asc' : 'desc';
+            $operator  = ($metric->comparison_type === 'lte') ? '<=' : '>=';
 
             if ($metric->scoring_type === 'monthly_flat') {
-                // Monthly flat: sum raw values and compare against monthly period_targets
-                $cumulativeValue  = $slipsForMetric->sum('value');
-                $dailyPointsSum   = $slipsForMetric->sum('daily_points_earned');
+                // Monthly flat: sum values and compare against monthly period_targets
+                $sumValue     = $slipsForMetric->sum('value');
+                $sumRef       = $slipsForRef->sum('value');
+                $dailyPointsSum = $slipsForMetric->sum('daily_points_earned');
 
-                $target    = PeriodTarget::where('metric_id', $metric->id)->where('period_type', 'monthly')
-                    ->where('min_value', '<=', $cumulativeValue)->orderBy('min_value', 'desc')->first();
+                $cumulativeValue = $sumValue;
+                if ($metric->value_type === 'percentage' && $sumRef > 0) {
+                    $cumulativeValue = ($sumValue / $sumRef) * 100;
+                }
 
-                $periodPoints  = $target ? $target->points_awarded : 0;
-                $trafficLight  = $target ? $target->tier_label : 'grey';
+                $target = PeriodTarget::where('metric_id', $metric->id)
+                    ->where('period_type', 'monthly')
+                    ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                    ->where('min_value', $operator, $cumulativeValue)
+                    ->orderBy('min_value', $sortOrder)
+                    ->first();
+
+                $periodPoints = $target ? $target->points_awarded : 0;
+                $trafficLight = $target ? $target->tier_label : 'grey';
 
                 PerformanceScore::updateOrCreate(
                     ['user_id' => $user->id, 'metric_id' => $metric->id, 'period_type' => 'monthly',
                      'period_start' => $monthStart->toDateString(), 'period_end' => $monthEnd->toDateString()],
-                    ['cumulative_value'  => $cumulativeValue, 'daily_points_sum' => $dailyPointsSum,
+                    ['cumulative_value' => $cumulativeValue, 'daily_points_sum' => $dailyPointsSum,
                      'period_points_earned' => $periodPoints, 'traffic_light' => $trafficLight]
                 );
 
             } else {
                 // 10/20/30 cumulative: process each period boundary
                 foreach ($periodsToCalculate as $period) {
-                    $periodSlips     = $slipsForMetric->filter(fn($s) => Carbon::parse($s->date)->between($period['start'], $period['end']));
-                    $cumulativeValue = $periodSlips->sum('value');
-                    $dailyPointsSum  = $periodSlips->sum('daily_points_earned');
+                    $periodSlips    = $slipsForMetric->filter(fn($s) => Carbon::parse($s->date)->between($period['start'], $period['end']));
+                    $periodRefSlips = $slipsForRef->filter(fn($s) => Carbon::parse($s->date)->between($period['start'], $period['end']));
+                    
+                    $sumValue = $periodSlips->sum('value');
+                    $sumRef   = $periodRefSlips->sum('value');
+                    $dailyPointsSum = $periodSlips->sum('daily_points_earned');
 
-                    $target = PeriodTarget::where('metric_id', $metric->id)->where('period_type', $period['type'])
-                        ->where('min_value', '<=', $cumulativeValue)->orderBy('min_value', 'desc')->first();
+                    $cumulativeValue = $sumValue;
+                    if ($metric->value_type === 'percentage' && $sumRef > 0) {
+                        $cumulativeValue = ($sumValue / $sumRef) * 100;
+                    }
+
+                    $target = PeriodTarget::where('metric_id', $metric->id)
+                        ->where('period_type', $period['type'])
+                        ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                        ->where('min_value', $operator, $cumulativeValue)
+                        ->orderBy('min_value', $sortOrder)
+                        ->first();
 
                     $periodPoints = $target ? $target->points_awarded : 0;
                     $trafficLight = $target ? $target->tier_label : 'grey';
@@ -87,7 +115,7 @@ class CalculateScores extends Command
                     PerformanceScore::updateOrCreate(
                         ['user_id' => $user->id, 'metric_id' => $metric->id, 'period_type' => $period['type'],
                          'period_start' => $period['start']->toDateString(), 'period_end' => $period['end']->toDateString()],
-                        ['cumulative_value'  => $cumulativeValue, 'daily_points_sum' => $dailyPointsSum,
+                        ['cumulative_value' => $cumulativeValue, 'daily_points_sum' => $dailyPointsSum,
                          'period_points_earned' => $periodPoints, 'traffic_light' => $trafficLight]
                     );
                 }

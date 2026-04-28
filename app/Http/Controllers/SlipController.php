@@ -141,15 +141,46 @@ class SlipController extends Controller
         }
 
         // --- Calculate Daily Points ---
+        $metric = Metric::find($request->metric_id);
+        $userRole = $user->roles()->first();
+        
+        $comparisonValue = $request->value;
+        
+        if ($metric->value_type === 'percentage' && $metric->reference_metric_id) {
+            $referenceSlip = Slip::where('user_id', $user->id)
+                ->where('metric_id', $metric->reference_metric_id)
+                ->where('date', $date->toDateString())
+                ->where('status', 'approved')
+                ->first();
+            
+            if ($referenceSlip && $referenceSlip->value > 0) {
+                $comparisonValue = ($request->value / $referenceSlip->value) * 100;
+            } else {
+                $comparisonValue = 0;
+            }
+        }
+
+        $sortOrder = ($metric->comparison_type === 'lte') ? 'asc' : 'desc';
+
         $tiers = DailyScoringTier::where('metric_id', $request->metric_id)
-            ->orderBy('min_value', 'desc')
+            ->when($userRole, function($q) use ($userRole) {
+                return $q->where('role_id', $userRole->id);
+            })
+            ->orderBy('min_value', $sortOrder)
             ->get();
 
         $dailyPoints = 0;
         foreach ($tiers as $tier) {
-            if ($request->value >= $tier->min_value) {
-                $dailyPoints = $tier->daily_points;
-                break;
+            if ($metric->comparison_type === 'lte') {
+                if ($comparisonValue <= $tier->min_value) {
+                    $dailyPoints = $tier->daily_points;
+                    break;
+                }
+            } else {
+                if ($comparisonValue >= $tier->min_value) {
+                    $dailyPoints = $tier->daily_points;
+                    break;
+                }
             }
         }
 

@@ -39,6 +39,11 @@ class ScoringService
                 'type' => '30_days',
                 'start' => $startOfMonth->copy(), // Starts from day 1 (Consolidated)
                 'end' => $endOfMonth->copy()
+            ],
+            [
+                'type' => 'monthly',
+                'start' => $startOfMonth->copy(),
+                'end' => $endOfMonth->copy()
             ]
         ];
 
@@ -65,6 +70,24 @@ class ScoringService
         $totalValue = (float) ($data->total_value ?? 0);
         $dailyPointsSum = (float) ($data->total_daily_points ?? 0);
 
+        // Calculate percentage against reference metric if needed
+        if ($metric->value_type === 'percentage' && $metric->reference_metric_id) {
+            $refData = Slip::where('user_id', $user->id)
+                ->where('metric_id', $metric->reference_metric_id)
+                ->where('status', 'approved')
+                ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                ->select(DB::raw('SUM(value) as total_ref_value'))
+                ->first();
+                
+            $totalRefValue = (float) ($refData->total_ref_value ?? 0);
+            
+            if ($totalRefValue > 0) {
+                $totalValue = ($totalValue / $totalRefValue) * 100;
+            } else {
+                $totalValue = 0;
+            }
+        }
+
         // 2. Find target tiers for this period
         $targets = PeriodTarget::where('metric_id', $metric->id)
             ->where('period_type', $type)
@@ -72,9 +95,11 @@ class ScoringService
             ->get();
 
         $periodPoints = 0;
+        $achievedTier = 'grey';
         foreach ($targets as $target) {
             if ($totalValue >= $target->min_value) {
                 $periodPoints = (float) $target->points_awarded;
+                $achievedTier = $target->tier_label;
                 break;
             }
         }
@@ -92,23 +117,8 @@ class ScoringService
                 'cumulative_value' => $totalValue,
                 'daily_points_sum' => $dailyPointsSum,
                 'period_points_earned' => $periodPoints,
-                'traffic_light' => self::determineTrafficLight($periodPoints, $targets),
+                'traffic_light' => $achievedTier,
             ]
         );
-    }
-
-    private static function determineTrafficLight($points, $targets)
-    {
-        if ($targets->isEmpty()) return 'grey';
-        
-        $maxPoints = $targets->max('points_awarded');
-        if ($maxPoints == 0) return 'grey';
-
-        $ratio = ($points / $maxPoints) * 100;
-
-        if ($ratio >= 100) return 'green';
-        if ($ratio >= 70) return 'yellow';
-        if ($ratio > 0) return 'red';
-        return 'grey';
     }
 }

@@ -22,66 +22,58 @@ class AttendanceController extends Controller
             ->limit(30)
             ->get();
 
+        $roleId = $user->roles()->first()?->id;
+
         return Inertia::render('Attendance/Index', [
             'records'   => $records,
             'today'     => Carbon::today()->toDateString(),
             'yesterday' => Carbon::yesterday()->toDateString(),
             'rules'     => [
-                'work_start' => AppSetting::get('attendance_work_start', '09:00'),
-                'grace_end'  => AppSetting::get('attendance_grace_end', '09:15'),
-                'half_day'   => AppSetting::get('attendance_half_day', '10:00'),
+                'work_start' => AppSetting::get('attendance_work_start', '09:00', $roleId),
+                'grace_end'  => AppSetting::get('attendance_grace_end', '09:15', $roleId),
+                'half_day'   => AppSetting::get('attendance_half_day', '10:00', $roleId),
             ]
         ]);
     }
 
     public function store(Request $request)
     {
-        // ... validation and guards ...
         $request->validate([
-            'date'          => 'required|date',
-            'check_in_time' => 'required',
-            'image'         => 'required|image|max:5120',
+            'image_blob' => 'required', // Base64 string from camera
+            'latitude'   => 'nullable|numeric',
+            'longitude'  => 'nullable|numeric',
         ]);
 
         $user = auth()->user();
-        $date = Carbon::parse($request->date);
-        $now  = Carbon::now();
+        $roleId = $user->roles()->first()?->id;
+        $now = Carbon::now();
+        $date = Carbon::today();
 
-        if ($date->isYesterday() && $now->hour >= 12) {
-            return back()->withErrors(['date' => 'Deadline passed. Yesterday\'s attendance must be submitted before 12:00 PM today.']);
+        // 1. Geofence Validation
+        $isWithinGeofence = false;
+        $distanceFromCenter = null;
+
+        $centerLat = AppSetting::get('geofence_latitude', null, $roleId);
+        $centerLng = AppSetting::get('geofence_longitude', null, $roleId);
+        $radius    = AppSetting::get('geofence_radius', 200, $roleId);
+
+        if ($request->latitude && $request->longitude && $centerLat && $centerLng) {
+            $distanceFromCenter = $this->calculateDistance(
+                $request->latitude, 
+                $request->longitude, 
+                $centerLat, 
+                $centerLng
+            );
+            $isWithinGeofence = ($distanceFromCenter <= $radius);
         }
 
-        $existing = Attendance::where('user_id', $user->id)->where('date', $date->toDateString())->first();
-        
-        // If it's not today/yesterday, we ONLY allow it if it's a resubmission of a rejected record
-        if (!$date->isToday() && !$date->isYesterday()) {
-            if (!$existing || $existing->approval_status !== 'rejected') {
-                return back()->withErrors(['date' => 'Only today\'s or yesterday\'s date is allowed for new submissions.']);
-            }
-        }
-
-        $isHoliday = Holiday::where('is_active', true)
-            ->where('date', $date->toDateString())
-            ->where(fn($q) => $q->whereNull('user_id')->orWhere('user_id', $user->id))
-            ->exists();
-
-        if ($isHoliday && (!$existing || $existing->approval_status !== 'rejected')) {
-            return back()->withErrors(['date' => 'This date is a holiday. Attendance not required.']);
-        }
-
-        if ($existing && $existing->approval_status === 'approved') {
-            return back()->withErrors(['date' => 'Attendance already approved. Cannot change.']);
-        }
-
-        // Determine attendance status from DB settings
-        // Standardize time format (handle H:i:s or H:i)
-        $formattedTime = Carbon::parse($request->check_in_time)->format('H:i');
+        // 2. Attendance Status Logic
+        $formattedTime = $now->format('H:i');
         $checkIn = Carbon::createFromFormat('H:i', $formattedTime);
-        $workStartTime = AppSetting::get('attendance_work_start', '09:00');
-        $graceEndTime  = AppSetting::get('attendance_grace_end', '09:15');
-        $halfDayTime   = AppSetting::get('attendance_half_day', '10:00');
+        
+        $graceEndTime  = AppSetting::get('attendance_grace_end', '09:15', $roleId);
+        $halfDayTime   = AppSetting::get('attendance_half_day', '10:00', $roleId);
 
-        $workStart = Carbon::createFromFormat('H:i', $workStartTime);
         $graceEnd  = Carbon::createFromFormat('H:i', $graceEndTime);
         $halfDayThreshold = Carbon::createFromFormat('H:i', $halfDayTime);
 
@@ -92,19 +84,30 @@ class AttendanceController extends Controller
             $status = 'late';
         }
 
-        $imagePath = $request->file('image')->store('attendance', 'public');
+        // 3. Handle Base64 Image
+        $img = $request->image_blob;
+        $img = str_replace('data:image/png;base64,', '', $img);
+        $img = str_replace(' ', '+', $img);
+        $data = base64_decode($img);
+        $fileName = 'attendance/' . $user->id . '_' . time() . '.png';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($fileName, $data);
 
-        Attendance::updateOrCreate(
+        // 4. Save Attendance Record
+        $attendance = Attendance::updateOrCreate(
             ['user_id' => $user->id, 'date' => $date->toDateString()],
             [
-                'check_in_time'   => $formattedTime,
-                'image_path'      => $imagePath,
-                'status'          => $status,
-                'approval_status' => 'pending',
+                'check_in_time'        => $formattedTime,
+                'image_path'           => $fileName,
+                'status'               => $status,
+                'approval_status'      => 'pending',
+                'latitude'             => $request->latitude,
+                'longitude'            => $request->longitude,
+                'is_within_geofence'   => $isWithinGeofence,
+                'distance_from_center' => $distanceFromCenter,
             ]
         );
 
-        // Dynamic 'Attendance' Slip Logic:
+        // 5. Dynamic 'Attendance' Slip Logic
         $attendanceMetric = Metric::where('key', 'attendance')->first();
         if ($attendanceMetric) {
             $val = match($status) {
@@ -112,8 +115,8 @@ class AttendanceController extends Controller
                 default    => 1.0,
             };
 
-            // Calculate daily points based on tiers
             $tiers = \App\Models\DailyScoringTier::where('metric_id', $attendanceMetric->id)
+                ->when($roleId, fn($q) => $q->where('role_id', $roleId))
                 ->orderBy('min_value', 'desc')
                 ->get();
 
@@ -131,26 +134,39 @@ class AttendanceController extends Controller
             );
         }
 
-        // Dynamic 'Late' Slip Logic:
-        // Find the 'Late' metric (id: 7)
+        // 6. Dynamic 'Late' Slip Logic
         $lateMetric = Metric::where('key', 'late')->first();
-        
         if ($lateMetric) {
             if ($status === 'late') {
-                // Auto-create an APPROVED slip for the 'Late' metric (consistent with previous logic)
                 Slip::updateOrCreate(
                     ['user_id' => $user->id, 'metric_id' => $lateMetric->id, 'date' => $date->toDateString()],
                     ['value' => 1, 'status' => 'approved', 'comment' => 'Automated late entry from Attendance']
                 );
             } else {
-                // If they re-mark and are NOT late (or are half-day), remove any existing late slip for this day
                 Slip::where('user_id', $user->id)->where('metric_id', $lateMetric->id)->where('date', $date->toDateString())->delete();
             }
             
             ScoringService::updateMonthScores($user, $date->toDateString());
         }
 
-        return back()->with('success', 'Attendance submitted. Pending approval.');
+        $msg = 'Attendance marked successfully.';
+        if (!$isWithinGeofence) {
+            $msg .= ' WARNING: Captured outside office geofence.';
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371000; // meters
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat/2) * sin($dLat/2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon/2) * sin($dLon/2);
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        return $earthRadius * $c;
     }
 
     public function create() {}

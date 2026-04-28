@@ -57,7 +57,7 @@ const onEmployeeChange = () => {
 // Period Blocks logic
 const periodBlocks = computed(() => {
     // If it's a long period (3+ months), we only show one "Summary" block
-    if (['3_months', '6_months', '1_year'].includes(activePeriod.value)) {
+    if (['3_months', '6_months', '1_year', 'custom'].includes(activePeriod.value)) {
         return [{ label: "Summary", start: 1, end: 1, isSummary: true }];
     }
 
@@ -102,6 +102,24 @@ const formatTargets = (targets, isPeriod = false) => {
 
 const getPeriodTargetsForPrefix = (metric, typePrefix) => {
     return metric.period_targets?.filter(t => t.period_type === typePrefix) || [];
+};
+
+// For metrics like 'Late' that only have 'monthly' targets, fall back from 30_days to monthly
+const getEffectiveTargets = (metric, typePrefix) => {
+    let targets = getPeriodTargetsForPrefix(metric, typePrefix);
+    if (targets.length === 0 && typePrefix === '30_days') {
+        targets = getPeriodTargetsForPrefix(metric, 'monthly');
+    }
+    return targets;
+};
+
+// For metrics like 'Late', fall back from 30_days to monthly score
+const getEffectiveScore = (metricId, type) => {
+    let score = getPeriodScore(metricId, type);
+    if ((!score || parseFloat(score.period_points_earned || 0) === 0) && type === '30_days') {
+        score = getPeriodScore(metricId, 'monthly');
+    }
+    return score;
 };
 
 // Determine Light Class based on metric's defined tiers or points
@@ -155,19 +173,105 @@ const getDayName = (dayNum) => {
 // Aggregate day bases report row (Respects metric filters)
 const getDayBasisPoints = (dayNum) => {
     let total = 0;
+    let hasData = false;
     const dateStr = `${props.month}-${String(dayNum).padStart(2, '0')}`;
     filteredMetrics.value.forEach(m => {
-        total += parseFloat(getDayPoints(dateStr, m.id) || 0);
+        const pts = getDayPoints(dateStr, m.id);
+        if (pts !== '-' && pts !== null) {
+            const parsed = parseFloat(pts);
+            if (!isNaN(parsed)) {
+                total += parsed;
+                hasData = true;
+            }
+        }
     });
-    return total > 0 ? total.toFixed(2) : '-';
+    return hasData ? total.toFixed(2) : '-';
 };
 
 // Calculate total points for a period type (Respects metric filters)
+// For '30_days', also include 'monthly'-only metrics (like Late) as a fallback
 const getPeriodTotalPoints = (type) => {
-    return props.scores
-        .filter(s => s.period_type === type && filteredMetrics.value.some(m => m.id == s.metric_id))
-        .reduce((sum, s) => sum + parseFloat(s.period_points_earned || 0), 0);
+    let total = 0;
+    filteredMetrics.value.forEach(m => {
+        let score = props.scores.find(s => s.period_type === type && s.metric_id == m.id);
+        if ((!score || parseFloat(score.period_points_earned || 0) === 0) && type === '30_days') {
+            score = props.scores.find(s => s.period_type === 'monthly' && s.metric_id == m.id);
+        }
+        if (score) {
+            total += parseFloat(score.period_points_earned || 0);
+        }
+    });
+    return total;
 };
+
+// Generate data for the Traffic Light Summary Table
+// Shows the COUNT of days the employee achieved each color
+const trafficLightSummary = computed(() => {
+    if (!filteredMetrics.value || filteredMetrics.value.length === 0) return null;
+    
+    let summary = {
+        metrics: [],
+        totals: { green: 0, yellow: 0, red: 0, grey: 0 }
+    };
+
+    filteredMetrics.value.forEach(m => {
+        // Skip 'late' metric in the top summary report as requested
+        if (m.key === 'late') return;
+
+        // Find 30_days or monthly targets to get max points for the label
+        let targets = m.period_targets?.filter(t => t.period_type === '30_days' || t.period_type === 'monthly') || [];
+        
+        // If there are no targets, don't show the metric in the summary
+        if (targets.length === 0) return;
+
+        let maxPoints = Math.max(...targets.map(t => parseFloat(t.points_awarded || 0)), 0);
+        
+        let row = {
+            id: m.id,
+            label: m.label,
+            maxPoints: maxPoints,
+            green: 0, yellow: 0, red: 0, grey: 0
+        };
+
+        // Check if this metric has daily scoring tiers
+        const hasDailyTiers = m.daily_scoring_tiers && m.daily_scoring_tiers.length > 0;
+
+        if (hasDailyTiers) {
+            // Loop through all days in the month and count the colors
+            for (let dayNum = 1; dayNum <= props.days; dayNum++) {
+                const dateStr = `${props.month}-${String(dayNum).padStart(2, '0')}`;
+                const pts = getDayPoints(dateStr, m.id);
+                const colorClass = lightClass(pts, m);
+                
+                if (colorClass.includes('bg-success')) { row.green++; summary.totals.green++; }
+                else if (colorClass.includes('bg-warning')) { row.yellow++; summary.totals.yellow++; }
+                else if (colorClass.includes('bg-danger')) { row.red++; summary.totals.red++; }
+                else { row.grey++; summary.totals.grey++; }
+            }
+        } else {
+            // For monthly count-based metrics (e.g., Late), use the achieved traffic light color from the period score
+            const score = getEffectiveScore(m.id, '30_days');
+            const color = score?.traffic_light || 'grey';
+            const pts = parseFloat(score?.period_points_earned || 0);
+            if (pts > 0) {
+                row[color] = pts;
+                summary.totals[color] = (summary.totals[color] || 0) + pts;
+            } else {
+                row.grey = '-';
+            }
+        }
+
+        // Convert 0 to '-' for better display
+        if (row.green === 0) row.green = '-';
+        if (row.yellow === 0) row.yellow = '-';
+        if (row.red === 0) row.red = '-';
+        if (row.grey === 0) row.grey = '-';
+
+        summary.metrics.push(row);
+    });
+
+    return summary;
+});
 
 const printReport = () => { window.print(); };
 </script>
@@ -208,20 +312,21 @@ const printReport = () => { window.print(); };
                             <i class="bi bi-printer me-1"></i> PRINT
                         </button>
                     </div>
+
+                    <!-- Custom Date Range Row -->
+                    <div v-if="activePeriod === 'custom'" class="row g-2 mt-2 fadeIn bg-light p-2 rounded-3 border">
+                        <div class="col-md-4">
+                            <input type="date" class="form-control form-control-sm glass-input" v-model="customFrom">
+                        </div>
+                        <div class="col-md-4">
+                            <input type="date" class="form-control form-control-sm glass-input" v-model="customTo">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-sm btn-dark w-100 fw-bold" @click="applyFilter('custom')">APPLY DATES</button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Custom Date Range Row -->
-                <div v-if="activePeriod === 'custom'" class="row g-2 mt-2 fadeIn bg-light p-2 rounded-3 border">
-                    <div class="col-md-4">
-                        <input type="date" class="form-control form-control-sm glass-input" v-model="customFrom">
-                    </div>
-                    <div class="col-md-4">
-                        <input type="date" class="form-control form-control-sm glass-input" v-model="customTo">
-                    </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-sm btn-dark w-100 fw-bold" @click="applyFilter('custom')">APPLY DATES</button>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -241,6 +346,42 @@ const printReport = () => { window.print(); };
                 <h3 class="fw-bold mb-1" style="color: #000;">BP and Co</h3>
                 <h5 class="fw-bold" style="color: #444;">Traffic Light Report</h5>
                 <h6 class="fw-bold text-uppercase" style="color: #555;">{{ employee.name }}</h6>
+            </div>
+
+            <!-- Traffic Light Summary Table (Top Report) -->
+            <div v-if="hasSelection && trafficLightSummary && trafficLightSummary.metrics.length > 0 && ['this_month', '10_days', '20_days', '30_days'].includes(activePeriod)" class="card shadow-sm border-0 bg-white mb-5 table-print-container" style="overflow-x: auto;">
+                <table class="table table-bordered text-center align-middle m-0 excel-table">
+                    <thead>
+                        <tr>
+                            <th colspan="5" class="py-3 bg-light text-dark fw-bold text-uppercase fs-5" style="letter-spacing: 1px;">
+                                EMPLOYEE TRAFFIC LIGHT – {{ employee.roles && employee.roles.length > 0 ? employee.roles[0].name : 'STAFF' }}
+                            </th>
+                        </tr>
+                        <tr>
+                            <th style="background-color: #6c757d; color: white; width: 25%; font-size: 1rem;" class="py-3 align-middle">Traffic Light<br>Parameters</th>
+                            <th style="background-color: #198754; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Green<br><small>( >70 )</small></th>
+                            <th style="background-color: #ffc107; color: black; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Yellow<br><small>(<70 & >= 50)</small></th>
+                            <th style="background-color: #dc3545; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Red<br><small>(<50 & >= 30)</small></th>
+                            <th style="background-color: #6c757d; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Grey<br><small>(<30)</small></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in trafficLightSummary.metrics" :key="row.id" style="background-color: #e9ecef;">
+                            <td class="fw-bold text-start ps-4 py-3 text-uppercase text-dark" style="font-size: 1rem;">{{ row.label }} ({{ row.maxPoints }})</td>
+                            <td class="fw-bold text-dark fs-5">{{ row.green }}</td>
+                            <td class="fw-bold text-dark fs-5">{{ row.yellow }}</td>
+                            <td class="fw-bold text-dark fs-5">{{ row.red }}</td>
+                            <td class="fw-bold text-dark fs-5">{{ row.grey }}</td>
+                        </tr>
+                        <tr style="background-color: #d6d8db; border-top: 3px solid #fff;">
+                            <td class="fw-bold text-start ps-4 py-3 text-uppercase text-dark fs-5">TOTAL</td>
+                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.green || '-' }}</td>
+                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.yellow || '-' }}</td>
+                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.red || '-' }}</td>
+                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.grey || '-' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             <!-- Generate Separate Tables / Summary -->
@@ -280,18 +421,19 @@ const printReport = () => { window.print(); };
                                 <div style="font-size: 0.75rem;">{{ formatDate(block.start) }} to {{ formatDate(block.end) }}</div>
                             </th>
                             <!-- Days headers -->
-                            <th v-for="d in (block.end - block.start + 1)" :key="d" style="min-width: 65px; border-right: 1px solid #ddd;">
+                            <th v-for="d in (block.end - block.start + 1)" :key="d" style="min-width: 65px; border-right: 1px solid #ddd; background-color: #003287; color: #fff;">
                                 <div class="small fw-bold">{{ formatDate(block.start + d - 1) }}</div>
-                                <div class="small text-muted">{{ getDayName(block.start + d - 1) }}</div>
+                                <div class="small text-white-50">{{ getDayName(block.start + d - 1) }}</div>
                             </th>
                             
                             <!-- Aggregation headers -->
-                            <th style="min-width: 90px; background-color: #fff6e5;">10 Days Target</th>
-                            <th style="min-width: 90px; background-color: #fff6e5;">10 Days Achieved</th>
-                            <th style="min-width: 90px; background-color: #f0f7ff;">20 Days Target</th>
-                            <th style="min-width: 90px; background-color: #f0f7ff;">20 Days Achieved</th>
-                            <th style="min-width: 90px; background-color: #eefdf4;">30 Days Target</th>
-                            <th style="min-width: 90px; background-color: #f1f0ff;">Consolidated Points</th>
+                            <th style="min-width: 90px; background-color: #ffe8cc; color: #000;">10 Days Target</th>
+                            <th style="min-width: 90px; background-color: #ffe8cc; color: #000;">10 Days Achieved</th>
+                            <th style="min-width: 90px; background-color: #d1e9ff; color: #000;">20 Days Target</th>
+                            <th style="min-width: 90px; background-color: #d1e9ff; color: #000;">20 Days Achieved</th>
+                            <th style="min-width: 90px; background-color: #c9f7dc; color: #000;">30 Days Target</th>
+                            <th style="min-width: 90px; background-color: #c9f7dc; color: #000;">30 Days Achieved</th>
+                            <th style="min-width: 90px; background-color: #e2e1ff; color: #000;">Consolidated Points</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -311,8 +453,9 @@ const printReport = () => { window.print(); };
                                 <td class="small fw-bold text-primary target-legend">{{ formatTargets(getPeriodTargetsForPrefix(metric, '20_days'), true) }}</td>
                                 <td class="fw-bold bg-white">{{ getPeriodScore(metric.id, '20_days')?.cumulative_value > 0 ? getPeriodScore(metric.id, '20_days').cumulative_value : '-' }}</td>
 
-                                <td class="small fw-bold text-danger target-legend">{{ formatTargets(getPeriodTargetsForPrefix(metric, '30_days'), true) }}</td>
-                                <td class="fw-bold bg-white">{{ getPeriodScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '30_days').period_points_earned).toFixed(0) : '-' }}</td>
+                                <td class="small fw-bold text-danger target-legend">{{ formatTargets(getEffectiveTargets(metric, '30_days'), true) }}</td>
+                                <td class="fw-bold bg-white">{{ getEffectiveScore(metric.id, '30_days')?.cumulative_value > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').cumulative_value).toLocaleString() : '-' }}</td>
+                                <td class="fw-bold bg-white">{{ getEffectiveScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').period_points_earned).toFixed(2) : (getEffectiveScore(metric.id, '30_days')?.daily_points_sum > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').daily_points_sum).toFixed(2) : '-') }}</td>
                             </tr>
 
                             <!-- Daily Points Row -->
@@ -338,18 +481,19 @@ const printReport = () => { window.print(); };
                                 <!-- Aggregation Points with Colors -->
                                 <td class="bg-light"></td>
                                 <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '10_days')?.period_points_earned, null, getMetricMaxPoints(metric, '10_days'))">
-                                    {{ getPeriodScore(metric.id, '10_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '10_days').period_points_earned).toFixed(0) : '-' }}
+                                    {{ getPeriodScore(metric.id, '10_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '10_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
                                 
                                 <td class="bg-light"></td>
                                 <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '20_days')?.period_points_earned, null, getMetricMaxPoints(metric, '20_days'))">
-                                    {{ getPeriodScore(metric.id, '20_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '20_days').period_points_earned).toFixed(0) : '-' }}
+                                    {{ getPeriodScore(metric.id, '20_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '20_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
 
                                 <td class="bg-light"></td>
-                                <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '30_days')?.period_points_earned, null, getMetricMaxPoints(metric, '30_days'))">
-                                    {{ getPeriodScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '30_days').period_points_earned).toFixed(0) : '-' }}
+                                <td class="fw-bold" :class="lightClass(getEffectiveScore(metric.id, '30_days')?.period_points_earned, null, getMetricMaxPoints(metric, '30_days') || getMetricMaxPoints(metric, 'monthly'))">
+                                    {{ getEffectiveScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
+                                <td class="bg-light"></td>
                             </tr>
                         </template>
 
@@ -371,8 +515,11 @@ const printReport = () => { window.print(); };
                                 {{ getPeriodTotalPoints('20_days') > 0 ? getPeriodTotalPoints('20_days') : '-' }}
                             </td>
                             <td class="bg-light fw-bold text-end pe-3">Total 30D</td>
+                            <td class="fw-bold" :class="lightClass(getPeriodTotalPoints('30_days'), null, 100)">
+                                {{ getPeriodTotalPoints('30_days') > 0 ? getPeriodTotalPoints('30_days').toFixed(2) : '-' }}
+                            </td>
                             <td class="fw-bold fs-5" :class="lightClass(getPeriodTotalPoints('30_days'), null, 100)">
-                                {{ getPeriodTotalPoints('30_days') > 0 ? getPeriodTotalPoints('30_days') : '-' }}
+                                {{ getPeriodTotalPoints('30_days') > 0 ? getPeriodTotalPoints('30_days').toFixed(2) : '-' }}
                             </td>
                         </tr>
                     </tbody>

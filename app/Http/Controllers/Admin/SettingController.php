@@ -9,25 +9,29 @@ use Inertia\Inertia;
 
 class SettingController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $settings = AppSetting::all()->pluck('value', 'key');
+        $roleId = $request->role_id;
+        $settings = AppSetting::where('role_id', $roleId)->pluck('value', 'key');
         
+        $roles = \Spatie\Permission\Models\Role::all();
+
         return Inertia::render('Admin/Settings/Index', [
-            'settings' => $settings
+            'settings' => (object)$settings,
+            'roles' => $roles,
+            'selected_role_id' => $roleId
         ]);
     }
 
     public function update(Request $request)
     {
-        $request->validate([
-            'attendance_work_start' => 'required',
-            'attendance_grace_end'  => 'required',
-            'attendance_half_day'   => 'required',
-        ]);
+        $roleId = $request->role_id;
 
-        foreach ($request->all() as $key => $value) {
-            AppSetting::updateOrCreate(['key' => $key], ['value' => $value]);
+        foreach ($request->except(['role_id']) as $key => $value) {
+            AppSetting::updateOrCreate(
+                ['key' => $key, 'role_id' => $roleId],
+                ['value' => $value]
+            );
         }
 
         return back()->with('success', 'System settings updated successfully.');

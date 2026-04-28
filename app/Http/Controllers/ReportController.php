@@ -53,6 +53,7 @@ class ReportController extends Controller
         $scores = [];
 
         if ($user) {
+            $user->load('roles');
             $userRoleIds = $user->roles->pluck('id');
             // Get all metrics for this user's role, eagerly loading scoped tiers
             $metrics = Metric::with([
