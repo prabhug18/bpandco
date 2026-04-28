@@ -560,6 +560,10 @@ const printReport = () => { window.print(); };
     line-height: 1.2;
 }
 
+</style>
+
+<style>
+/* Global Print Styles (Must be outside scoped block to target sidebar) */
 @media print {
     @page {
         size: A4 landscape;
@@ -575,31 +579,31 @@ const printReport = () => { window.print(); };
         padding: 0 !important;
     }
 
-    /* Override Tailwind/Layout constraints */
-    .py-12, .max-w-7xl, .mx-auto, .sm\:px-6, .lg\:px-8 {
+    /* Target all layout containers to force full width and hide sidebar */
+    #sidebar, .sidebar, .toggle-btn, .top-header, nav, aside, footer, .no-print, .btn, .glass-input {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Force content to stretch since sidebar is hidden */
+    .app-wrapper, .main-content, .py-12, .max-w-7xl, .mx-auto, .sm\:px-6, .lg\:px-8 {
         padding: 0 !important;
         margin: 0 !important;
         max-width: none !important;
         width: 100% !important;
+        left: 0 !important;
+        position: relative !important;
     }
 
-    /* Hide Navigation and Sidebar */
-    nav, aside, footer, .no-print, .btn, .form-select, .glass-input {
-        display: none !important;
-    }
-
-    /* Reset Container */
-    .p-4 { padding: 0 !important; }
-    .bg-white { background-color: white !important; }
-    
     .table-print-container {
         page-break-inside: avoid;
-        margin: 0 0 10px 0 !important;
+        margin: 0 0 15px 0 !important;
         padding: 0 !important;
         box-shadow: none !important;
         border: none !important;
         width: 100% !important;
-        overflow: visible !important;
     }
 
     .excel-table {
@@ -611,28 +615,10 @@ const printReport = () => { window.print(); };
 
     .excel-table th, .excel-table td {
         border: 1px solid #000 !important;
-        padding: 3px 2px !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+        padding: 4px 2px !important;
     }
 
-    .metric-col {
-        width: 140px !important;
-        font-size: 8pt !important;
-    }
-
-    .target-legend {
-        font-size: 6pt !important;
-        line-height: 1 !important;
-        max-width: 90px !important;
-    }
-
-    .print-header {
-        display: block !important;
-        margin-bottom: 5px !important;
-    }
-
-    /* Ensure backgrounds show up */
+    /* Ensure background colors show up */
     .bg-success { background-color: #198754 !important; color: white !important; }
     .bg-warning { background-color: #ffc107 !important; color: black !important; }
     .bg-danger { background-color: #dc3545 !important; color: white !important; }
