@@ -561,12 +561,82 @@ const printReport = () => { window.print(); };
 }
 
 @media print {
-    body { background: white !important; }
+    @page {
+        size: A4 landscape;
+        margin: 5mm;
+    }
+    
+    body { 
+        background: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Override Tailwind/Layout constraints */
+    .py-12, .max-w-7xl, .mx-auto, .sm\:px-6, .lg\:px-8 {
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+    }
+
+    /* Hide Navigation and Sidebar */
+    nav, aside, footer, .no-print, .btn, .form-select, .glass-input {
+        display: none !important;
+    }
+
+    /* Reset Container */
+    .p-4 { padding: 0 !important; }
+    .bg-white { background-color: white !important; }
+    
     .table-print-container {
         page-break-inside: avoid;
-        margin-bottom: 2rem !important;
+        margin: 0 0 10px 0 !important;
+        padding: 0 !important;
         box-shadow: none !important;
         border: none !important;
+        width: 100% !important;
+        overflow: visible !important;
     }
+
+    .excel-table {
+        width: 100% !important;
+        table-layout: auto !important;
+        font-size: 8pt !important;
+        border: 2px solid #000 !important;
+    }
+
+    .excel-table th, .excel-table td {
+        border: 1px solid #000 !important;
+        padding: 3px 2px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .metric-col {
+        width: 140px !important;
+        font-size: 8pt !important;
+    }
+
+    .target-legend {
+        font-size: 6pt !important;
+        line-height: 1 !important;
+        max-width: 90px !important;
+    }
+
+    .print-header {
+        display: block !important;
+        margin-bottom: 5px !important;
+    }
+
+    /* Ensure backgrounds show up */
+    .bg-success { background-color: #198754 !important; color: white !important; }
+    .bg-warning { background-color: #ffc107 !important; color: black !important; }
+    .bg-danger { background-color: #dc3545 !important; color: white !important; }
+    .bg-secondary { background-color: #6c757d !important; color: white !important; }
+    .bg-light { background-color: #f8f9fa !important; color: black !important; }
 }
 </style>
