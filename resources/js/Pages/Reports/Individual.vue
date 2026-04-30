@@ -145,17 +145,23 @@ const getPeriodTargetsForPrefix = (metric, typePrefix) => {
     return metric.period_targets?.filter(t => t.period_type === typePrefix) || [];
 };
 
-// For metrics like 'Late' that only have 'monthly' targets, fall back from 30_days to monthly
+// For metrics like 'Late' that only have 'monthly' targets, fall back from 30_days or custom to monthly
 const getEffectiveTargets = (metric, typePrefix) => {
     let targets = getPeriodTargetsForPrefix(metric, typePrefix);
-    if (targets.length === 0 && typePrefix === '30_days') {
+    if (targets.length === 0 && (typePrefix === '30_days' || typePrefix === 'custom')) {
         targets = getPeriodTargetsForPrefix(metric, 'monthly');
     }
     return targets;
 };
 
-// For metrics like 'Late', fall back from 30_days to monthly score
+// For metrics like 'Late', fall back from 30_days to monthly score. Supports custom range.
 const getEffectiveScore = (metricId, type) => {
+    // If in custom mode, try to get the 'custom' type score first if requesting the final aggregation
+    if (activePeriod.value === 'custom' && (type === '30_days' || type === 'monthly')) {
+        let customScore = getPeriodScore(metricId, 'custom');
+        if (customScore) return customScore;
+    }
+
     let score = getPeriodScore(metricId, type);
     if ((!score || parseFloat(score.period_points_earned || 0) === 0) && type === '30_days') {
         score = getPeriodScore(metricId, 'monthly');
@@ -405,7 +411,7 @@ const printReport = () => { window.print(); };
             </div>
 
             <!-- Traffic Light Summary Table (Top Report) -->
-            <div v-if="hasSelection && trafficLightSummary && trafficLightSummary.metrics.length > 0 && ['this_month', '10_days', '20_days', '30_days'].includes(activePeriod)" class="card shadow-sm border-0 bg-white mb-5 table-print-container" style="overflow-x: auto;">
+            <div v-if="hasSelection && trafficLightSummary && trafficLightSummary.metrics.length > 0 && ['this_month', '10_days', '20_days', '30_days', 'custom'].includes(activePeriod)" class="card shadow-sm border-0 bg-white mb-5 table-print-container" style="overflow-x: auto;">
                 <table class="table table-bordered text-center align-middle m-0 excel-table">
                     <thead>
                         <tr>
