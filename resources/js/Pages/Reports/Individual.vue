@@ -124,6 +124,14 @@ const getEffectiveScore = (metricId, type) => {
 
 // Determine Light Class based on metric's defined tiers or points
 const lightClass = (val, metric = null, max = 0) => {
+    // If we passed a string color directly (e.g. from backend traffic_light)
+    if (typeof val === 'string' && ['green', 'yellow', 'red', 'grey'].includes(val)) {
+        if (val === 'green') return 'bg-success text-white';
+        if (val === 'yellow') return 'bg-warning text-dark';
+        if (val === 'red') return 'bg-danger text-white';
+        return 'bg-secondary text-white';
+    }
+
     const v = parseFloat(val);
     if(isNaN(v) || v <= 0) return 'bg-secondary text-white'; // grey
     
@@ -139,12 +147,12 @@ const lightClass = (val, metric = null, max = 0) => {
         }
     }
 
-    // Fallback for period points (using max ratio)
+    // Fallback for period points (using standard ranges for TOTAL or as a last resort)
     if (max > 0) {
         const ratio = (v / max) * 100;
-        if(ratio >= 100) return 'bg-success text-white';
-        if(ratio >= 70) return 'bg-warning text-dark';
-        if(ratio >= 40) return 'bg-danger text-white';
+        if(ratio >= 70) return 'bg-success text-white';
+        if(ratio >= 50) return 'bg-warning text-dark';
+        if(ratio >= 30) return 'bg-danger text-white';
         return 'bg-secondary text-white';
     }
 
@@ -228,8 +236,7 @@ const trafficLightSummary = computed(() => {
     };
 
     filteredMetrics.value.forEach(m => {
-        // Skip 'late' metric in the top summary report as requested
-        if (m.key === 'late') return;
+        // Include all metrics in the top summary report
 
         // Find 30_days or monthly targets to get max points for the label
         let targets = m.period_targets?.filter(t => t.period_type === '30_days' || t.period_type === 'monthly') || [];
@@ -512,17 +519,17 @@ const printReport = () => { window.print(); };
 
                                 <!-- Aggregation Points with Colors -->
                                 <td class="bg-light"></td>
-                                <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '10_days')?.period_points_earned, null, getMetricMaxPoints(metric, '10_days'))">
+                                <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '10_days')?.traffic_light || 'grey')">
                                     {{ getPeriodScore(metric.id, '10_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '10_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
                                 
                                 <td class="bg-light"></td>
-                                <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '20_days')?.period_points_earned, null, getMetricMaxPoints(metric, '20_days'))">
+                                <td class="fw-bold" :class="lightClass(getPeriodScore(metric.id, '20_days')?.traffic_light || 'grey')">
                                     {{ getPeriodScore(metric.id, '20_days')?.period_points_earned > 0 ? parseFloat(getPeriodScore(metric.id, '20_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
 
                                 <td class="bg-light"></td>
-                                <td class="fw-bold" :class="lightClass(getEffectiveScore(metric.id, '30_days')?.period_points_earned, null, getMetricMaxPoints(metric, '30_days') || getMetricMaxPoints(metric, 'monthly'))">
+                                <td class="fw-bold" :class="lightClass(getEffectiveScore(metric.id, '30_days')?.traffic_light || 'grey')">
                                     {{ getEffectiveScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').period_points_earned).toFixed(2) : '-' }}
                                 </td>
                                 <td class="bg-light"></td>
