@@ -32,22 +32,47 @@ const periods = [
     { key: '10_days',    label: '10 DAYS' },
     { key: '20_days',    label: '20 DAYS' },
     { key: '30_days',    label: '30 DAYS' },
-    { key: '3_months',   label: '3 MO' },
-    { key: '6_months',   label: '6 MO' },
-    { key: '1_year',     label: '1 YR' },
     { key: 'custom',     label: 'CUSTOM' },
 ];
 
 const applyFilter = (key = activePeriod.value) => {
+    // If someone tries to access hidden/old periods via URL or state, redirect them
+    const validPeriods = periods.map(p => p.key);
+    if (!validPeriods.includes(key)) {
+        key = 'this_month';
+    }
+
     activePeriod.value = key;
     const params = { period: key, user_id: selectedEmployeeId.value };
     
     if (key === 'custom') {
+        if (!customFrom.value || !customTo.value) {
+            alert("Please select both start and end dates.");
+            return;
+        }
+        
+        const start = new Date(customFrom.value);
+        const end = new Date(customTo.value);
+        
+        if (start > end) {
+            alert("Start date cannot be after end date.");
+            return;
+        }
+
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        // Strictly block anything over 31 days
+        if (diffDays > 31) {
+            alert("Custom period cannot exceed 31 days (1 month). Please select a shorter range.");
+            return;
+        }
+        
         params.date_from = customFrom.value;
         params.date_to   = customTo.value;
     }
     
-    router.get(route('reports.individual'), params, { preserveState: true });
+    router.get(route('reports.individual'), params, { preserveState: false });
 };
 
 const onEmployeeChange = () => {
