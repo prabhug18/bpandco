@@ -159,6 +159,23 @@ const getMetricMaxPoints = (metric, type) => {
     return targets.length > 0 ? Math.max(...targets.map(t => parseFloat(t.points_awarded || 0))) : 0;
 };
 
+// Helper to sum raw values for a range of days
+const getPeriodRawSum = (metricId, start, end) => {
+    let sum = 0;
+    let hasData = false;
+    for (let d = start; d <= end; d++) {
+        const val = getDayVal(`${props.month}-${String(d).padStart(2, '0')}`, metricId);
+        if (val !== '-' && val !== null) {
+            const parsed = parseFloat(String(val).replace(/,/g, ''));
+            if (!isNaN(parsed)) {
+                sum += parsed;
+                hasData = true;
+            }
+        }
+    }
+    return hasData ? sum : null;
+};
+
 const formatDate = (dayNum) => {
     const d = new Date(`${props.month}-${String(dayNum).padStart(2, '0')}T00:00:00`);
     const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
@@ -189,14 +206,10 @@ const getDayBasisPoints = (dayNum) => {
 };
 
 // Calculate total points for a period type (Respects metric filters)
-// For '30_days', also include 'monthly'-only metrics (like Late) as a fallback
 const getPeriodTotalPoints = (type) => {
     let total = 0;
     filteredMetrics.value.forEach(m => {
-        let score = props.scores.find(s => s.period_type === type && s.metric_id == m.id);
-        if ((!score || parseFloat(score.period_points_earned || 0) === 0) && type === '30_days') {
-            score = props.scores.find(s => s.period_type === 'monthly' && s.metric_id == m.id);
-        }
+        let score = getEffectiveScore(m.id, type);
         if (score) {
             total += parseFloat(score.period_points_earned || 0);
         }
@@ -220,8 +233,6 @@ const trafficLightSummary = computed(() => {
 
         // Find 30_days or monthly targets to get max points for the label
         let targets = m.period_targets?.filter(t => t.period_type === '30_days' || t.period_type === 'monthly') || [];
-        
-        // If there are no targets, don't show the metric in the summary
         if (targets.length === 0) return;
 
         let maxPoints = Math.max(...targets.map(t => parseFloat(t.points_awarded || 0)), 0);
@@ -230,45 +241,42 @@ const trafficLightSummary = computed(() => {
             id: m.id,
             label: m.label,
             maxPoints: maxPoints,
-            green: 0, yellow: 0, red: 0, grey: 0
+            green: '-', yellow: '-', red: '-', grey: '-'
         };
 
-        // Check if this metric has daily scoring tiers
-        const hasDailyTiers = m.daily_scoring_tiers && m.daily_scoring_tiers.length > 0;
-
-        if (hasDailyTiers) {
-            // Loop through all days in the month and count the colors
-            for (let dayNum = 1; dayNum <= props.days; dayNum++) {
-                const dateStr = `${props.month}-${String(dayNum).padStart(2, '0')}`;
-                const pts = getDayPoints(dateStr, m.id);
-                const colorClass = lightClass(pts, m);
-                
-                if (colorClass.includes('bg-success')) { row.green++; summary.totals.green++; }
-                else if (colorClass.includes('bg-warning')) { row.yellow++; summary.totals.yellow++; }
-                else if (colorClass.includes('bg-danger')) { row.red++; summary.totals.red++; }
-                else { row.grey++; summary.totals.grey++; }
-            }
-        } else {
-            // For monthly count-based metrics (e.g., Late), use the achieved traffic light color from the period score
-            const score = getEffectiveScore(m.id, '30_days');
-            const color = score?.traffic_light || 'grey';
-            const pts = parseFloat(score?.period_points_earned || 0);
-            if (pts > 0) {
-                row[color] = pts;
-                summary.totals[color] = (summary.totals[color] || 0) + pts;
-            } else {
-                row.grey = '-';
-            }
+        // Determine which phase (color) the user is currently in for this month
+        const score = getEffectiveScore(m.id, '30_days');
+        if (score) {
+            const color = score.traffic_light || 'grey';
+            const pts = parseFloat(score.period_points_earned || 0);
+            
+            // Show the points achieved in the corresponding phase column
+            row[color] = pts.toFixed(2);
+            
+            // Accumulate totals for the bottom row (as numbers)
+            summary.totals[color] = (parseFloat(summary.totals[color]) || 0) + pts;
         }
-
-        // Convert 0 to '-' for better display
-        if (row.green === 0) row.green = '-';
-        if (row.yellow === 0) row.yellow = '-';
-        if (row.red === 0) row.red = '-';
-        if (row.grey === 0) row.grey = '-';
 
         summary.metrics.push(row);
     });
+
+    // Calculate Grand Total of all points
+    let grandTotal = 0;
+    ['green', 'yellow', 'red', 'grey'].forEach(c => {
+        grandTotal += parseFloat(summary.totals[c] || 0);
+    });
+
+    // Reset totals to show ONLY the grand total in the correct phase column
+    summary.totals = { green: '-', yellow: '-', red: '-', grey: '-' };
+    
+    if (grandTotal > 0) {
+        let finalColor = 'grey';
+        if (grandTotal > 70) finalColor = 'green';
+        else if (grandTotal >= 50) finalColor = 'yellow';
+        else if (grandTotal >= 30) finalColor = 'red';
+        
+        summary.totals[finalColor] = grandTotal.toFixed(2);
+    }
 
     return summary;
 });
@@ -373,12 +381,12 @@ const printReport = () => { window.print(); };
                             <td class="fw-bold text-dark fs-5">{{ row.red }}</td>
                             <td class="fw-bold text-dark fs-5">{{ row.grey }}</td>
                         </tr>
-                        <tr style="background-color: #d6d8db; border-top: 3px solid #fff;">
-                            <td class="fw-bold text-start ps-4 py-3 text-uppercase text-dark fs-5">TOTAL</td>
-                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.green || '-' }}</td>
-                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.yellow || '-' }}</td>
-                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.red || '-' }}</td>
-                            <td class="fw-bold fs-5 text-dark">{{ trafficLightSummary.totals.grey || '-' }}</td>
+                        <tr style="background-color: #f8f9fa !important; border-top: 4px solid #212529; border-bottom: 2px solid #212529;">
+                            <td class="fw-bold text-start ps-4 py-3 text-uppercase fs-5" style="color: #000000 !important;">TOTAL</td>
+                            <td class="fw-bold fs-4" style="color: #000000 !important;">{{ trafficLightSummary.totals.green || '-' }}</td>
+                            <td class="fw-bold fs-4" style="color: #000000 !important;">{{ trafficLightSummary.totals.yellow || '-' }}</td>
+                            <td class="fw-bold fs-4" style="color: #000000 !important;">{{ trafficLightSummary.totals.red || '-' }}</td>
+                            <td class="fw-bold fs-4" style="color: #000000 !important;">{{ trafficLightSummary.totals.grey || '-' }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -448,13 +456,37 @@ const printReport = () => { window.print(); };
                                 
                                 <!-- Right side aggregation targets & values (Values row) -->
                                 <td class="small fw-bold text-success target-legend">{{ formatTargets(getPeriodTargetsForPrefix(metric, '10_days'), true) }}</td>
-                                <td class="fw-bold bg-white">{{ getPeriodScore(metric.id, '10_days')?.cumulative_value > 0 ? getPeriodScore(metric.id, '10_days').cumulative_value : '-' }}</td>
+                                <td class="fw-bold bg-white">
+                                    <div v-if="getPeriodRawSum(metric.id, 1, 10)">
+                                        {{ getPeriodRawSum(metric.id, 1, 10).toLocaleString() }}
+                                        <span v-if="metric.value_type === 'percentage'" class="text-muted small">
+                                            ({{ parseFloat(getPeriodScore(metric.id, '10_days')?.cumulative_value || 0).toFixed(2) }}%)
+                                        </span>
+                                    </div>
+                                    <div v-else>-</div>
+                                </td>
 
                                 <td class="small fw-bold text-primary target-legend">{{ formatTargets(getPeriodTargetsForPrefix(metric, '20_days'), true) }}</td>
-                                <td class="fw-bold bg-white">{{ getPeriodScore(metric.id, '20_days')?.cumulative_value > 0 ? getPeriodScore(metric.id, '20_days').cumulative_value : '-' }}</td>
+                                <td class="fw-bold bg-white">
+                                    <div v-if="getPeriodRawSum(metric.id, 1, 20)">
+                                        {{ getPeriodRawSum(metric.id, 1, 20).toLocaleString() }}
+                                        <span v-if="metric.value_type === 'percentage'" class="text-muted small">
+                                            ({{ parseFloat(getPeriodScore(metric.id, '20_days')?.cumulative_value || 0).toFixed(2) }}%)
+                                        </span>
+                                    </div>
+                                    <div v-else>-</div>
+                                </td>
 
                                 <td class="small fw-bold text-danger target-legend">{{ formatTargets(getEffectiveTargets(metric, '30_days'), true) }}</td>
-                                <td class="fw-bold bg-white">{{ getEffectiveScore(metric.id, '30_days')?.cumulative_value > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').cumulative_value).toLocaleString() : '-' }}</td>
+                                <td class="fw-bold bg-white">
+                                    <div v-if="getPeriodRawSum(metric.id, 1, props.days)">
+                                        {{ getPeriodRawSum(metric.id, 1, props.days).toLocaleString() }}
+                                        <span v-if="metric.value_type === 'percentage'" class="text-muted small">
+                                            ({{ parseFloat(getEffectiveScore(metric.id, '30_days')?.cumulative_value || 0).toFixed(2) }}%)
+                                        </span>
+                                    </div>
+                                    <div v-else>-</div>
+                                </td>
                                 <td class="fw-bold bg-white">{{ getEffectiveScore(metric.id, '30_days')?.period_points_earned > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').period_points_earned).toFixed(2) : (getEffectiveScore(metric.id, '30_days')?.daily_points_sum > 0 ? parseFloat(getEffectiveScore(metric.id, '30_days').daily_points_sum).toFixed(2) : '-') }}</td>
                             </tr>
 

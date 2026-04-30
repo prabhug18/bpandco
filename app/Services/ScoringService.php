@@ -88,11 +88,23 @@ class ScoringService
             }
         }
 
-        // 2. Find target tiers for this period
+        // 2. Find target tiers for this period (Filter by user's role)
+        $roleId = $user->roles()->first()?->id;
+        
         $targets = PeriodTarget::where('metric_id', $metric->id)
             ->where('period_type', $type)
+            ->when($roleId, fn($q) => $q->where('role_id', $roleId))
             ->orderBy('min_value', 'desc')
             ->get();
+
+        // Fallback: If calculating 30_days and no targets found for role, check 'monthly'
+        if ($targets->isEmpty() && $type === '30_days') {
+            $targets = PeriodTarget::where('metric_id', $metric->id)
+                ->where('period_type', 'monthly')
+                ->when($roleId, fn($q) => $q->where('role_id', $roleId))
+                ->orderBy('min_value', 'desc')
+                ->get();
+        }
 
         $periodPoints = 0;
         $achievedTier = 'grey';

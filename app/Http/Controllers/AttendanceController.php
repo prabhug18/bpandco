@@ -78,9 +78,18 @@ class AttendanceController extends Controller
         $halfDayThreshold = Carbon::createFromFormat('H:i', $halfDayTime);
 
         $status = 'present';
+        
+        // Check if today is a holiday or personal leave
+        $isHoliday = Holiday::where('date', $date->toDateString())
+            ->where(function($q) use ($user) {
+                $q->whereNull('user_id')->orWhere('user_id', $user->id);
+            })
+            ->where('is_active', true)
+            ->exists();
+
         if ($checkIn->gt($halfDayThreshold)) {
             $status = 'half_day';
-        } elseif ($checkIn->gt($graceEnd)) {
+        } elseif ($checkIn->gt($graceEnd) && !$isHoliday) {
             $status = 'late';
         }
 

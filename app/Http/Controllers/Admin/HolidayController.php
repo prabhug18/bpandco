@@ -60,7 +60,10 @@ class HolidayController extends Controller
             $users = \App\Models\User::whereDoesntHave('roles', fn($q) => $q->where('name', 'admin'))->get();
         }
 
+        $lateMetric = \App\Models\Metric::where('key', 'late')->first();
+
         foreach ($users as $user) {
+            // 1. Credit Attendance for the holiday
             \App\Models\Slip::updateOrCreate(
                 ['user_id' => $user->id, 'metric_id' => $attendanceMetric->id, 'date' => $holiday->date],
                 [
@@ -70,6 +73,17 @@ class HolidayController extends Controller
                     'comment' => 'Holiday Credit: ' . $holiday->reason
                 ]
             );
+
+            // 2. Remove any automated 'Late' slips if this is now a holiday
+            if ($lateMetric) {
+                \App\Models\Slip::where('user_id', $user->id)
+                    ->where('metric_id', $lateMetric->id)
+                    ->where('date', $holiday->date)
+                    ->delete();
+            }
+
+            // 3. Recalculate scores for the user
+            \App\Services\ScoringService::updateMonthScores($user, $holiday->date);
         }
     }
 
