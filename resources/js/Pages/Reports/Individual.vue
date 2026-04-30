@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import Swal from 'sweetalert2';
 
 const props = defineProps({
     employee: Object,
@@ -47,7 +48,12 @@ const applyFilter = (key = activePeriod.value) => {
     
     if (key === 'custom') {
         if (!customFrom.value || !customTo.value) {
-            alert("Please select both start and end dates.");
+            Swal.fire({
+                icon: 'warning',
+                title: 'Missing Dates',
+                text: 'Please select both start and end dates.',
+                confirmButtonColor: '#003287'
+            });
             return;
         }
         
@@ -55,7 +61,12 @@ const applyFilter = (key = activePeriod.value) => {
         const end = new Date(customTo.value);
         
         if (start > end) {
-            alert("Start date cannot be after end date.");
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid Range',
+                text: 'Start date cannot be after end date.',
+                confirmButtonColor: '#003287'
+            });
             return;
         }
 
@@ -64,7 +75,12 @@ const applyFilter = (key = activePeriod.value) => {
         
         // Strictly block anything over 31 days
         if (diffDays > 31) {
-            alert("Custom period cannot exceed 31 days (1 month). Please select a shorter range.");
+            Swal.fire({
+                icon: 'error',
+                title: 'Limit Exceeded',
+                text: 'Custom period cannot exceed 31 days (1 month). Please select a shorter range.',
+                confirmButtonColor: '#003287'
+            });
             return;
         }
         
