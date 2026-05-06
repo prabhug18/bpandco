@@ -57,7 +57,7 @@ Route::middleware('auth')->group(function () {
 
     // Phase 6: Reports
     Route::get('reports/individual', [ReportController::class, 'individual'])->name('reports.individual');
-    Route::get('reports/team', [ReportController::class, 'team'])->name('reports.team');
+    // Route::get('reports/team', [ReportController::class, 'team'])->name('reports.team');
 
     // Phase 8.4: Incentive & Increment Reports (Admin/Supervisor)
     Route::middleware(['can:configure incentives'])->group(function () {
