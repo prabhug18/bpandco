@@ -95,11 +95,7 @@ watch(() => page.props.flash, (flash) => {
                                 <i class="bi bi-file-earmark-spreadsheet"></i><span> My Report</span>
                             </Link>
                         </li>
-                        <!-- <li v-if="$page.props.auth.user.permissions.includes('view team reports')">
-                            <Link :href="route('reports.team')" :class="{ 'active': route().current('reports.team') }">
-                                <i class="bi bi-grid-3x3-gap"></i><span> Team Summary</span>
-                            </Link>
-                        </li> -->
+                        <!-- Team Report hidden by request -->
                         <li v-if="$page.props.auth.user.permissions.includes('configure incentives')">
                             <Link :href="route('reports.incentives')" :class="{ 'active': route().current('reports.incentives') }">
                                 <i class="bi bi-cash-coin"></i><span> Incentive Payables</span>
