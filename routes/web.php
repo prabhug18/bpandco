@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
     // User Roles & Management
+    Route::get('users/export', [UserController::class, 'export'])->name('users.export');
     Route::resource('users', UserController::class);
 
     // Phase 3: Slips Module

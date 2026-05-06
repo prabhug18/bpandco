@@ -11,11 +11,30 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with('roles')->orderBy('name')->get();
+        $search = $request->input('search');
+        $role = $request->input('role');
+
+        $users = User::with('roles')
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->when($role, function ($query, $role) {
+                $query->whereHas('roles', function ($q) use ($role) {
+                    $q->where('name', $role);
+                });
+            })
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('Users/Index', [
             'users' => $users,
+            'filters' => $request->only(['search', 'role']),
+            'roles' => Role::all(),
         ]);
     }
 
@@ -98,5 +117,56 @@ class UserController extends Controller
         $user->syncPermissions($request->input('permissions', []));
 
         return redirect()->route('users.index')->with('success', "User '{$user->name}' updated successfully.");
+    }
+
+    public function export(Request $request)
+    {
+        $search = $request->input('search');
+        $role = $request->input('role');
+
+        $users = User::with('roles')
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->when($role, function ($query, $role) {
+                $query->whereHas('roles', function ($q) use ($role) {
+                    $q->where('name', $role);
+                });
+            })
+            ->orderBy('name')
+            ->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Header
+        $sheet->setCellValue('A1', 'Employee Name');
+        $sheet->setCellValue('B1', 'Email');
+        $sheet->setCellValue('C1', 'Mobile');
+        $sheet->setCellValue('D1', 'Roles');
+
+        // Style header
+        $sheet->getStyle('A1:D1')->getFont()->setBold(true);
+
+        // Data
+        $row = 2;
+        foreach ($users as $user) {
+            $sheet->setCellValue('A' . $row, $user->name);
+            $sheet->setCellValue('B' . $row, $user->email);
+            $sheet->setCellValue('C' . $row, $user->mobile ?? 'N/A');
+            $sheet->setCellValue('D' . $row, $user->roles->pluck('name')->implode(', '));
+            $row++;
+        }
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $fileName = 'staff_export_' . now()->format('Y-m-d_His') . '.xlsx';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        $writer->save('php://output');
+        exit;
     }
 }
