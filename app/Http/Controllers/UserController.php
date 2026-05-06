@@ -8,6 +8,8 @@ use Inertia\Inertia;
 use Illuminate\Validation\Rules;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Hash;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class UserController extends Controller
 {
@@ -139,7 +141,7 @@ class UserController extends Controller
             ->orderBy('name')
             ->get();
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
 
         // Header
@@ -161,7 +163,7 @@ class UserController extends Controller
             $row++;
         }
 
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer = new Xlsx($spreadsheet);
         $fileName = 'staff_export_' . now()->format('Y-m-d_His') . '.xlsx';
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
