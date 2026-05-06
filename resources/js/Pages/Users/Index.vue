@@ -66,7 +66,7 @@ const deleteUser = async (user) => {
                     <h6 class="fw-bold text-muted mb-0">All Employees ({{ users.length }})</h6>
                     <div class="d-flex gap-2">
                         <button @click="exportToExcel" class="btn btn-outline-success rounded px-3">
-                            <i class="bi bi-file-earmark-excel me-2"></i>Export Excel
+                            <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export Staff
                         </button>
                         <Link :href="route('users.create')" class="btn btn-primary rounded px-4">
                             <i class="bi bi-person-plus me-2"></i>Add User

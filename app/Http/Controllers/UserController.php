@@ -8,8 +8,7 @@ use Inertia\Inertia;
 use Illuminate\Validation\Rules;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Hash;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+// Removed PhpSpreadsheet to fix live server error
 
 class UserController extends Controller
 {
@@ -141,34 +140,34 @@ class UserController extends Controller
             ->orderBy('name')
             ->get();
 
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
+        $fileName = 'staff_export_' . now()->format('Y-m-d_His') . '.csv';
 
-        // Header
-        $sheet->setCellValue('A1', 'Employee Name');
-        $sheet->setCellValue('B1', 'Email');
-        $sheet->setCellValue('C1', 'Mobile');
-        $sheet->setCellValue('D1', 'Roles');
+        $headers = [
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
 
-        // Style header
-        $sheet->getStyle('A1:D1')->getFont()->setBold(true);
+        $columns = ['Employee Name', 'Email', 'Mobile', 'Roles'];
 
-        // Data
-        $row = 2;
-        foreach ($users as $user) {
-            $sheet->setCellValue('A' . $row, $user->name);
-            $sheet->setCellValue('B' . $row, $user->email);
-            $sheet->setCellValue('C' . $row, $user->mobile ?? 'N/A');
-            $sheet->setCellValue('D' . $row, $user->roles->pluck('name')->implode(', '));
-            $row++;
-        }
+        $callback = function() use($users, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
 
-        $writer = new Xlsx($spreadsheet);
-        $fileName = 'staff_export_' . now()->format('Y-m-d_His') . '.xlsx';
+            foreach ($users as $user) {
+                fputcsv($file, [
+                    $user->name,
+                    $user->email,
+                    $user->mobile ?? 'N/A',
+                    $user->roles->pluck('name')->implode(', ')
+                ]);
+            }
 
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $fileName . '"');
-        $writer->save('php://output');
-        exit;
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }
