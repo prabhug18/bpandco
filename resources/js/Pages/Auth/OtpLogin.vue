@@ -121,6 +121,7 @@ const backToMobile = () => {
                         maxlength="6"
                         required
                         autofocus
+                        autocomplete="one-time-code"
                     >
                     <div v-if="otpForm.errors.otp" class="text-danger small mt-1 text-center">
                         {{ otpForm.errors.otp }}
