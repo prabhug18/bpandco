@@ -71,22 +71,39 @@ class SlipController extends Controller
     }
 
 
-    /**
-     * Calculate points preview in real-time via AJAX (no DB write).
-     */
     public function previewPoints(Request $request)
     {
         $request->validate(['metric_id' => 'required|exists:metrics,id', 'value' => 'required|numeric|min:0']);
 
+        $user = auth()->user();
+        $userRole = $user ? $user->roles()->first() : null;
+        $metric = Metric::find($request->metric_id);
+
+        if (!$metric) {
+            return response()->json(['points' => 0]);
+        }
+
+        $sortOrder = ($metric->comparison_type === 'lte') ? 'asc' : 'desc';
+
         $tiers = DailyScoringTier::where('metric_id', $request->metric_id)
-            ->orderBy('min_value', 'desc')
+            ->when($userRole, function($q) use ($userRole) {
+                return $q->where('role_id', $userRole->id);
+            })
+            ->orderBy('min_value', $sortOrder)
             ->get();
 
         $points = 0;
         foreach ($tiers as $tier) {
-            if ($request->value >= $tier->min_value) {
-                $points = $tier->daily_points;
-                break;
+            if ($metric->comparison_type === 'lte') {
+                if ($request->value <= $tier->min_value) {
+                    $points = $tier->daily_points;
+                    break;
+                }
+            } else {
+                if ($request->value >= $tier->min_value) {
+                    $points = $tier->daily_points;
+                    break;
+                }
             }
         }
 
