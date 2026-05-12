@@ -11,6 +11,10 @@ defineProps({
     status: {
         type: String,
     },
+    whatsapp_otp_enabled: {
+        type: Boolean,
+        default: false
+    }
 });
 
 const form = useForm({
@@ -102,7 +106,7 @@ const submit = () => {
                     Login
                 </button>
 
-                <div class="text-center mt-4">
+                <div v-if="whatsapp_otp_enabled" class="text-center mt-4">
                     <div class="position-relative mb-3">
                         <hr class="text-muted">
                         <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 small text-muted">OR</span>

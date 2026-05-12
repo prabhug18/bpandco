@@ -21,6 +21,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
+            'whatsapp_otp_enabled' => \App\Models\AppSetting::get('whatsapp_otp_enabled', false) == '1',
         ]);
     }
 
