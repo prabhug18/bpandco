@@ -4,8 +4,22 @@ import { Head, useForm, Link, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
 
-const otpSent = ref(page.props.flash?.otp_sent || false);
-const mobileNumber = ref(page.props.flash?.mobile || '');
+const otpSent = ref(false);
+const mobileNumber = ref('');
+
+// Watch for changes in page props to update local state
+import { watch, onMounted } from 'vue';
+
+const syncState = () => {
+    if (page.props.flash?.otp_sent) {
+        otpSent.value = true;
+        mobileNumber.value = page.props.flash.mobile || '';
+        otpForm.mobile = mobileNumber.value;
+    }
+};
+
+onMounted(syncState);
+watch(() => page.props.flash, syncState, { deep: true });
 
 const phoneForm = useForm({
     mobile: '',
@@ -19,12 +33,8 @@ const otpForm = useForm({
 
 const sendOtp = () => {
     phoneForm.post(route('otp.send'), {
-        onSuccess: (page) => {
-            if (page.props.flash?.otp_sent) {
-                otpSent.value = true;
-                mobileNumber.value = page.props.flash.mobile;
-                otpForm.mobile = mobileNumber.value;
-            }
+        onSuccess: () => {
+            // State will be synced by the watch/onMounted
         },
     });
 };
