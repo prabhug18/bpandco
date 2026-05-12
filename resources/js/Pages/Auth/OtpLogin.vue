@@ -7,34 +7,25 @@ const page = usePage();
 const otpSent = ref(false);
 const mobileNumber = ref('');
 
-// Watch for changes in page props to update local state
-import { watch, onMounted } from 'vue';
-
-const syncState = () => {
-    if (page.props.flash?.otp_sent) {
-        otpSent.value = true;
-        mobileNumber.value = page.props.flash.mobile || '';
-        otpForm.mobile = mobileNumber.value;
-    }
-};
-
-onMounted(syncState);
-watch(() => page.props.flash, syncState, { deep: true });
-
 const phoneForm = useForm({
     mobile: '',
 });
 
 const otpForm = useForm({
-    mobile: mobileNumber.value,
+    mobile: '',
     otp: '',
     remember: false,
 });
 
 const sendOtp = () => {
     phoneForm.post(route('otp.send'), {
-        onSuccess: () => {
-            // State will be synced by the watch/onMounted
+        preserveScroll: true,
+        onSuccess: (page) => {
+            if (page.props.flash?.otp_sent) {
+                otpSent.value = true;
+                mobileNumber.value = page.props.flash.mobile;
+                otpForm.mobile = mobileNumber.value;
+            }
         },
     });
 };
