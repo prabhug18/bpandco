@@ -16,3 +16,14 @@ Schedule::command('incentives:calculate')->monthlyOn(1, '00:05');
 
 // Annual: calculate salary increments every April 1st at 00:10 AM
 Schedule::command('increments:calculate')->yearlyOn(4, 1, '00:10');
+
+// Schedule WhatsApp reminders
+try {
+    $employeeTime = \App\Models\AppSetting::get('whatsapp_employee_reminder_time', '19:00');
+    $supervisorTime = \App\Models\AppSetting::get('whatsapp_supervisor_reminder_time', '10:00');
+
+    Schedule::command('whatsapp:employee-reminders')->dailyAt($employeeTime);
+    Schedule::command('whatsapp:supervisor-reminders')->dailyAt($supervisorTime);
+} catch (\Exception $e) {
+    // Fail silently during initial setup when DB might not be ready
+}

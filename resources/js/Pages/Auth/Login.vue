@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, Link, usePage } from '@inertiajs/vue3';
+
+const page = usePage();
 
 defineProps({
     canResetPassword: {
@@ -39,6 +41,10 @@ const submit = () => {
 
             <div v-if="status" class="mb-4 text-sm font-medium text-green-600 text-center">
                 {{ status }}
+            </div>
+            
+            <div v-if="$page.props.errors?.error" class="mb-4 text-sm font-medium text-danger text-center">
+                {{ $page.props.errors.error }}
             </div>
 
             <form @submit.prevent="submit">
@@ -95,6 +101,16 @@ const submit = () => {
                     <span v-if="form.processing" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                     Login
                 </button>
+
+                <div class="text-center mt-4">
+                    <div class="position-relative mb-3">
+                        <hr class="text-muted">
+                        <span class="position-absolute top-50 start-50 translate-middle bg-white px-2 small text-muted">OR</span>
+                    </div>
+                    <Link :href="route('otp.form')" class="btn btn-outline-success w-100">
+                        <i class="fab fa-whatsapp me-2"></i> Login with WhatsApp OTP
+                    </Link>
+                </div>
 
             </form>
         </div>

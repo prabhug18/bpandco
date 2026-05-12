@@ -17,6 +17,18 @@ const form = useForm({
     geofence_latitude: props.settings.geofence_latitude || '',
     geofence_longitude: props.settings.geofence_longitude || '',
     geofence_radius: props.settings.geofence_radius || '200',
+
+    // WhatsApp Settings
+    whatsapp_api_url: props.settings.whatsapp_api_url || 'https://app.weconnext.in/api/v1/messages/send',
+    whatsapp_api_token: props.settings.whatsapp_api_token || '',
+    whatsapp_otp_template: props.settings.whatsapp_otp_template || 'bpandco_login_otp',
+    whatsapp_reminder_template: props.settings.whatsapp_reminder_template || 'bpandco_employee_reminder',
+    whatsapp_approval_template: props.settings.whatsapp_approval_template || 'bpandco_supervisor_reminder',
+    whatsapp_employee_reminder_time: props.settings.whatsapp_employee_reminder_time || '19:00',
+    whatsapp_supervisor_reminder_time: props.settings.whatsapp_supervisor_reminder_time || '10:00',
+    whatsapp_otp_enabled: props.settings.whatsapp_otp_enabled === '1' || props.settings.whatsapp_otp_enabled === 'true' || props.settings.whatsapp_otp_enabled === true,
+    whatsapp_employee_reminder_enabled: props.settings.whatsapp_employee_reminder_enabled === '1' || props.settings.whatsapp_employee_reminder_enabled === 'true' || props.settings.whatsapp_employee_reminder_enabled === true,
+    whatsapp_supervisor_reminder_enabled: props.settings.whatsapp_supervisor_reminder_enabled === '1' || props.settings.whatsapp_supervisor_reminder_enabled === 'true' || props.settings.whatsapp_supervisor_reminder_enabled === true,
 });
 
 const fetchLocation = () => {
@@ -168,7 +180,7 @@ const submit = () => {
                 </div>
 
                 <div class="col-md-6">
-                    <div class="alert alert-info border-0 shadow-sm rounded-4 p-4">
+                    <div class="alert alert-info border-0 shadow-sm rounded-4 p-4 mb-4">
                         <h6 class="fw-bold"><i class="bi bi-info-circle-fill me-2"></i> Configuration Guide</h6>
                         <hr>
                         <p class="small mb-2">Changing these values will affect <strong>new</strong> attendance submissions immediately.</p>
@@ -177,6 +189,90 @@ const submit = () => {
                             <li class="mb-2"><strong>Grace Period:</strong> Allows for a small delay (e.g. 15 mins) before marking as "Late".</li>
                             <li><strong>Half-Day:</strong> A hard cutoff point after which a full day's attendance cannot be claimed.</li>
                         </ul>
+                    </div>
+
+                    <!-- WhatsApp Configuration -->
+                    <div class="premium-card p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                            <h5 class="fw-bold text-success mb-0">
+                                <i class="fab fa-whatsapp me-2"></i> WhatsApp Integration
+                            </h5>
+                        </div>
+
+                        <form @submit.prevent="submit">
+                            <h6 class="fw-bold text-dark mb-3 border-bottom pb-2">WeConnext API Credentials</h6>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small">API Base URL</label>
+                                <input type="url" class="form-control" v-model="form.whatsapp_api_url" required>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label text-muted small">API Token (Bearer)</label>
+                                <input type="password" class="form-control" v-model="form.whatsapp_api_token" placeholder="Enter token to update">
+                                <small class="text-muted d-block mt-1" v-if="props.settings.whatsapp_api_token">Token is configured. Enter a new one to change it.</small>
+                            </div>
+
+                            <h6 class="fw-bold text-dark mb-3 border-bottom pb-2">Templates & Toggles</h6>
+                            
+                            <!-- Login OTP -->
+                            <div class="row align-items-center mb-3">
+                                <div class="col-8">
+                                    <label class="form-label mb-0 fw-bold">Login OTP</label>
+                                    <small class="text-muted d-block">Allow users to login via WhatsApp</small>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <div class="form-check form-switch d-inline-block">
+                                        <input class="form-check-input" type="checkbox" role="switch" v-model="form.whatsapp_otp_enabled">
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2" v-if="form.whatsapp_otp_enabled">
+                                    <input type="text" class="form-control form-control-sm" v-model="form.whatsapp_otp_template" placeholder="Template Name (e.g. bpandco_login_otp)">
+                                </div>
+                            </div>
+
+                            <!-- Employee Reminder -->
+                            <div class="row align-items-center mb-3">
+                                <div class="col-8">
+                                    <label class="form-label mb-0 fw-bold">Employee Daily Reminder</label>
+                                    <small class="text-muted d-block">Remind if no slip submitted</small>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <div class="form-check form-switch d-inline-block">
+                                        <input class="form-check-input" type="checkbox" role="switch" v-model="form.whatsapp_employee_reminder_enabled">
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2" v-if="form.whatsapp_employee_reminder_enabled">
+                                    <div class="d-flex gap-2">
+                                        <input type="time" class="form-control form-control-sm" v-model="form.whatsapp_employee_reminder_time" style="width: 120px;">
+                                        <input type="text" class="form-control form-control-sm" v-model="form.whatsapp_reminder_template" placeholder="Template Name">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Supervisor Reminder -->
+                            <div class="row align-items-center mb-4">
+                                <div class="col-8">
+                                    <label class="form-label mb-0 fw-bold">Supervisor Reminder</label>
+                                    <small class="text-muted d-block">Remind about pending approvals</small>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <div class="form-check form-switch d-inline-block">
+                                        <input class="form-check-input" type="checkbox" role="switch" v-model="form.whatsapp_supervisor_reminder_enabled">
+                                    </div>
+                                </div>
+                                <div class="col-12 mt-2" v-if="form.whatsapp_supervisor_reminder_enabled">
+                                    <div class="d-flex gap-2">
+                                        <input type="time" class="form-control form-control-sm" v-model="form.whatsapp_supervisor_reminder_time" style="width: 120px;">
+                                        <input type="text" class="form-control form-control-sm" v-model="form.whatsapp_approval_template" placeholder="Template Name">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 border-top pt-4">
+                                <button type="submit" class="btn btn-success glass-btn w-100 py-3 fw-bold shadow" :disabled="form.processing">
+                                    <i class="bi bi-whatsapp me-2"></i> SAVE WHATSAPP SETTINGS
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
