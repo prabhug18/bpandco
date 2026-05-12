@@ -21,10 +21,10 @@ const sendOtp = () => {
     phoneForm.post(route('otp.send'), {
         preserveScroll: true,
         onSuccess: (page) => {
-            if (page.props.flash?.otp_sent) {
+            if (page.props.flash?.success) {
                 otpSent.value = true;
-                mobileNumber.value = page.props.flash.mobile;
-                otpForm.mobile = mobileNumber.value;
+                mobileNumber.value = phoneForm.mobile;
+                otpForm.mobile = phoneForm.mobile;
             }
         },
     });

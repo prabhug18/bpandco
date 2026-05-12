@@ -64,7 +64,7 @@ class WhatsAppService
         $payload = [
             'to' => $formattedMobile,
             'template_id' => $templateName,
-            'variables' => array_values($variables)
+            'variables' => (object)$variables
         ];
 
         try {
