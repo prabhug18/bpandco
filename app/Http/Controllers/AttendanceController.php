@@ -32,6 +32,9 @@ class AttendanceController extends Controller
                 'work_start' => AppSetting::get('attendance_work_start', '09:00', $roleId),
                 'grace_end'  => AppSetting::get('attendance_grace_end', '09:15', $roleId),
                 'half_day'   => AppSetting::get('attendance_half_day', '10:00', $roleId),
+                'geofence_latitude'  => AppSetting::get('geofence_latitude', null, $roleId),
+                'geofence_longitude' => AppSetting::get('geofence_longitude', null, $roleId),
+                'geofence_radius'    => AppSetting::get('geofence_radius', 200, $roleId),
             ]
         ]);
     }
@@ -94,6 +97,11 @@ class AttendanceController extends Controller
         }
 
         // 3. Handle Base64 Image (JPEG)
+        $existing = Attendance::where('user_id', $user->id)->where('date', $date->toDateString())->first();
+        if ($existing && $existing->image_path) {
+            \Illuminate\Support\Facades\Storage::disk('r2')->delete($existing->image_path);
+        }
+
         $img = $request->image_blob;
         $img = str_replace('data:image/jpeg;base64,', '', $img);
         $img = str_replace(' ', '+', $img);
