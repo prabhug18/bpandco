@@ -113,7 +113,7 @@ const captureAndSubmit = () => {
     canvas.value.height = video.value.videoHeight;
     context.drawImage(video.value, 0, 0);
     
-    const dataUrl = canvas.value.toDataURL('image/png');
+    const dataUrl = canvas.value.toDataURL('image/jpeg', 0.6);
     
     form.image_blob = dataUrl;
     form.latitude = location.value.lat;

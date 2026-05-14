@@ -93,12 +93,12 @@ class AttendanceController extends Controller
             $status = 'late';
         }
 
-        // 3. Handle Base64 Image
+        // 3. Handle Base64 Image (JPEG)
         $img = $request->image_blob;
-        $img = str_replace('data:image/png;base64,', '', $img);
+        $img = str_replace('data:image/jpeg;base64,', '', $img);
         $img = str_replace(' ', '+', $img);
         $data = base64_decode($img);
-        $fileName = 'attendance/' . $user->id . '_' . time() . '.png';
+        $fileName = 'attendance/' . $user->id . '_' . time() . '.jpg';
         \Illuminate\Support\Facades\Storage::disk('public')->put($fileName, $data);
 
         // 4. Save Attendance Record
