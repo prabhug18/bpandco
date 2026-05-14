@@ -17,8 +17,8 @@ const selectedEmployee = ref('');
 const showImageModal = ref(false);
 const selectedImage = ref('');
 
-const viewImage = (path) => {
-    selectedImage.value = `/storage/${path}`;
+const viewImage = (url) => {
+    selectedImage.value = url;
     showImageModal.value = true;
 };
 
@@ -263,7 +263,7 @@ const bulkRejectAtt = () => {
                                             </span>
                                         </td>
                                         <td>
-                                            <button v-if="att.image_path" @click="viewImage(att.image_path)" class="btn btn-sm glass-btn text-info fw-bold border-info">
+                                            <button v-if="att.image_url" @click="viewImage(att.image_url)" class="btn btn-sm glass-btn text-info fw-bold border-info">
                                                 <i class="bi bi-camera me-1"></i> View
                                             </button>
                                             <span v-else class="text-muted small italic">No Image</span>

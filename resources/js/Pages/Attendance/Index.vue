@@ -151,8 +151,8 @@ const approvalBadge = (status) => ({
 // Image Modal Logic
 const showImageModal = ref(false);
 const selectedImage = ref('');
-const viewImage = (path) => {
-    selectedImage.value = `/storage/${path}`;
+const viewImage = (url) => {
+    selectedImage.value = url;
     showImageModal.value = true;
 };
 </script>
@@ -256,7 +256,7 @@ const viewImage = (path) => {
                                             <span v-else class="text-muted small">N/A</span>
                                         </td>
                                         <td>
-                                            <button v-if="r.image_path" @click="viewImage(r.image_path)" class="btn btn-sm btn-light border rounded-pill px-3">
+                                            <button v-if="r.image_url" @click="viewImage(r.image_url)" class="btn btn-sm btn-light border rounded-pill px-3">
                                                 <i class="bi bi-eye"></i>
                                             </button>
                                         </td>

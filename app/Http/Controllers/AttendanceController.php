@@ -99,7 +99,7 @@ class AttendanceController extends Controller
         $img = str_replace(' ', '+', $img);
         $data = base64_decode($img);
         $fileName = 'attendance/' . $user->id . '_' . time() . '.jpg';
-        \Illuminate\Support\Facades\Storage::disk('public')->put($fileName, $data);
+        \Illuminate\Support\Facades\Storage::disk('r2')->put($fileName, $data);
 
         // 4. Save Attendance Record
         $attendance = Attendance::updateOrCreate(
