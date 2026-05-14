@@ -466,7 +466,7 @@ const printReport = () => { window.print(); };
                             <td class="small">{{ formatTargets(getPeriodTargetsForPrefix(metric, '30_days'), true) }}</td>
                             <td class="fw-bold fs-5">{{ parseFloat(getPeriodScore(metric.id, '30_days')?.period_points_earned || 0).toFixed(0) }}</td>
                             <td>
-                                <span class="badge px-3 py-2 rounded-pill" :class="lightClass(getPeriodScore(metric.id, '30_days')?.period_points_earned, getMetricMaxPoints(metric, '30_days'))">
+                                <span class="badge px-3 py-2 rounded-pill" :class="lightClass(getPeriodScore(metric.id, '30_days')?.traffic_light)">
                                     {{ getPeriodScore(metric.id, '30_days')?.traffic_light?.toUpperCase() || 'NONE' }}
                                 </span>
                             </td>
