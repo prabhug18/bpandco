@@ -44,7 +44,7 @@ const onValueChange = (val, metricId) => {
     if (!val || val <= 0) { pointsPreview.value[metricId] = null; return; }
     previewTimer = setTimeout(async () => {
         try {
-            const r = await axios.get(route('slips.preview-points'), { params: { metric_id: metricId, value: val } });
+            const r = await axios.get(route('slips.preview-points'), { params: { metric_id: metricId, value: val, date: selectedDate.value } });
             pointsPreview.value[metricId] = r.data.points;
         } catch {}
     }, 350);

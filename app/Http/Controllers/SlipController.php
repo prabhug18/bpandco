@@ -73,14 +73,36 @@ class SlipController extends Controller
 
     public function previewPoints(Request $request)
     {
-        $request->validate(['metric_id' => 'required|exists:metrics,id', 'value' => 'required|numeric|min:0']);
+        $request->validate([
+            'metric_id' => 'required|exists:metrics,id', 
+            'value' => 'required|numeric|min:0',
+            'date' => 'nullable|date'
+        ]);
 
         $user = auth()->user();
         $userRole = $user ? $user->roles()->first() : null;
         $metric = Metric::find($request->metric_id);
+        $date = $request->date ? Carbon::parse($request->date)->toDateString() : Carbon::today()->toDateString();
 
         if (!$metric) {
             return response()->json(['points' => 0]);
+        }
+
+        $comparisonValue = $request->value;
+
+        // Handle Percentage Metrics
+        if ($metric->value_type === 'percentage' && $metric->reference_metric_id) {
+            $referenceSlip = Slip::where('user_id', $user->id)
+                ->where('metric_id', $metric->reference_metric_id)
+                ->where('date', $date)
+                // We look for any slip today (even pending) for the preview
+                ->first();
+            
+            if ($referenceSlip && $referenceSlip->value > 0) {
+                $comparisonValue = ($request->value / $referenceSlip->value) * 100;
+            } else {
+                $comparisonValue = 0;
+            }
         }
 
         $sortOrder = ($metric->comparison_type === 'lte') ? 'asc' : 'desc';
@@ -95,12 +117,12 @@ class SlipController extends Controller
         $points = 0;
         foreach ($tiers as $tier) {
             if ($metric->comparison_type === 'lte') {
-                if ($request->value <= $tier->min_value) {
+                if ($comparisonValue <= $tier->min_value) {
                     $points = $tier->daily_points;
                     break;
                 }
             } else {
-                if ($request->value >= $tier->min_value) {
+                if ($comparisonValue >= $tier->min_value) {
                     $points = $tier->daily_points;
                     break;
                 }
@@ -167,7 +189,6 @@ class SlipController extends Controller
             $referenceSlip = Slip::where('user_id', $user->id)
                 ->where('metric_id', $metric->reference_metric_id)
                 ->where('date', $date->toDateString())
-                ->where('status', 'approved')
                 ->first();
             
             if ($referenceSlip && $referenceSlip->value > 0) {
