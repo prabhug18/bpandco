@@ -26,7 +26,7 @@ class RetailEnamelCollectionSeeder extends Seeder
             'value_type' => 'percentage',
             'reference_metric_id' => $salesMetric->id,
             'scoring_type' => '10_20_30_days', // Changed from monthly_flat per requirements
-            'unit' => 'percentage'
+            'unit' => 'amount'
         ]);
 
         // Clear existing tiers for this role/metric to avoid duplicates
