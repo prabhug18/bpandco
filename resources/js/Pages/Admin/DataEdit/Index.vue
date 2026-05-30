@@ -144,14 +144,14 @@ const getBgColor = (colorCode) => {
             </div>
         </div>
 
-        <div class="p-4 theme-dark-container">
-            <div class="card premium-dark-card border-0 shadow-lg p-4 mx-auto" style="max-width: 1400px;">
+        <div class="p-4" style="background: #f7f9fc; min-height: calc(100vh - 140px);">
+            <div class="card shadow-sm border-0 p-4 mx-auto bg-white table-print-container" style="max-width: 1400px; border-radius: 15px;">
                 
                 <!-- Inner Toolbar: User Selection -->
-                <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary" style="border-opacity: 0.2;">
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
                     <div class="d-flex align-items-center gap-3">
-                        <label class="text-info fw-bold text-uppercase letter-spacing-1 small mb-0">Select Staff:</label>
-                        <select class="form-select form-select-sm dark-select border-info shadow-none text-white fw-bold" v-model="selectedUser" @change="applyFilters" style="width: 250px;">
+                        <label class="text-primary fw-bold text-uppercase letter-spacing-1 small mb-0">Select Staff:</label>
+                        <select class="form-select form-select-sm border-primary shadow-sm fw-bold rounded-pill px-3" v-model="selectedUser" @change="applyFilters" style="width: 250px; background-color: #f8fafc;">
                             <option value="">All Staff (Summary)</option>
                             <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
                         </select>
@@ -159,45 +159,45 @@ const getBgColor = (colorCode) => {
                 </div>
 
                 <!-- View A: All Users Summary -->
-                <div v-if="!selectedUser" class="table-responsive rounded shadow-inner-dark">
-                    <table class="table table-dark table-hover align-middle mb-0 custom-dark-table">
+                <div v-if="!selectedUser" class="table-responsive rounded border shadow-sm">
+                    <table class="table table-bordered table-hover align-middle mb-0 custom-light-table text-center">
                         <thead>
-                            <tr class="header-row">
-                                <th class="text-center" style="width: 80px;">S.NO</th>
-                                <th>NAME</th>
-                                <th class="text-center" style="width: 150px;">ACTION</th>
-                                <th class="text-center" style="width: 200px;">TOTAL SCORE</th>
+                            <tr class="header-row bg-light" style="font-weight: bold; border-bottom: 2px solid #ccc;">
+                                <th style="width: 80px;">S.NO</th>
+                                <th class="text-start ps-4">NAME</th>
+                                <th style="width: 180px;">ACTION</th>
+                                <th style="width: 220px;">TOTAL SCORE</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(row, index) in data" :key="row.id" class="dark-row-hover">
+                            <tr v-for="(row, index) in data" :key="row.id" class="table-row-hover">
                                 <td class="text-center text-muted fw-bold">{{ index + 1 }}</td>
-                                <td class="fw-bold fs-6 text-light">{{ row.name }}</td>
+                                <td class="text-start ps-4 fw-bold text-uppercase text-dark">{{ row.name }}</td>
                                 <td class="text-center">
                                     <button class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold" @click="selectUser(row.id)">
                                         <i class="bi bi-pencil-square me-1"></i> Edit Data
                                     </button>
                                 </td>
-                                <td class="p-0">
-                                    <div class="w-100 h-100 d-flex align-items-center justify-content-center fw-bold fs-5 shadow-inner" 
-                                         :style="{ backgroundColor: getBgColor(row.color), color: '#fff', minHeight: '55px' }">
+                                <td class="p-0 border" style="height: 55px;">
+                                    <div class="w-100 h-100 d-flex align-items-center justify-content-center fw-bold fs-5 shadow-sm rounded" 
+                                         :style="{ backgroundColor: getBgColor(row.color), color: '#fff', width: 'calc(100% - 8px)', height: 'calc(100% - 8px)', margin: '4px auto' }">
                                         {{ row.total_points }}
                                     </div>
                                 </td>
                             </tr>
                             <tr v-if="data.length === 0">
-                                <td colspan="4" class="text-center py-5 text-muted">No data found for the selected dates.</td>
+                                <td colspan="4" class="text-center py-5 text-muted fw-bold">No data found for the selected dates.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
                 <!-- View B: Specific User Date-wise Edit -->
-                <div v-else class="table-responsive rounded shadow-inner-dark">
-                    <table class="table table-dark table-hover align-middle mb-0 custom-dark-table text-center">
+                <div v-else class="table-responsive rounded border shadow-sm">
+                    <table class="table table-bordered table-hover align-middle mb-0 custom-light-table text-center">
                         <thead>
-                            <tr class="header-row">
-                                <th class="text-start pe-3">DATE</th>
+                            <tr class="header-row bg-light" style="font-weight: bold; border-bottom: 2px solid #ccc;">
+                                <th class="text-start ps-4 pe-3">DATE</th>
                                 <th>ATTENDANCE</th>
                                 <th v-for="m in metrics.filter(m => !['attendance', 'late'].includes(m.key))" :key="m.id">
                                     {{ m.label.toUpperCase() }}
@@ -206,31 +206,31 @@ const getBgColor = (colorCode) => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="row in data" :key="row.date" class="dark-row-hover">
-                                <td class="text-start fw-bold text-info">{{ row.formatted_date }}</td>
+                            <tr v-for="row in data" :key="row.date" class="table-row-hover">
+                                <td class="text-start ps-4 fw-bold text-primary">{{ row.formatted_date }}</td>
                                 
                                 <td>
-                                    <span class="badge rounded-pill px-3 py-2 border border-secondary" 
-                                          :class="{'bg-success': row.attendance === 'present', 'bg-warning text-dark': row.attendance === 'half_day', 'bg-danger': row.attendance === 'late', 'bg-secondary': row.attendance === 'absent'}">
+                                    <span class="badge rounded-pill px-3 py-2 border" 
+                                          :style="{ backgroundColor: row.attendance === 'present' ? '#22c55e' : (row.attendance === 'half_day' ? '#eab308' : (row.attendance === 'late' ? '#ef4444' : '#64748b')), color: '#fff' }">
                                         {{ row.attendance ? row.attendance.toUpperCase() : 'ABSENT' }}
                                     </span>
                                 </td>
 
                                 <td v-for="m in metrics.filter(m => !['attendance', 'late'].includes(m.key))" :key="m.id">
-                                    <span class="fw-semibold text-light" v-if="row.metrics[m.id] !== null">
+                                    <span class="fw-bold text-dark" v-if="row.metrics[m.id] !== null">
                                         {{ row.metrics[m.id] }}
                                     </span>
                                     <span class="text-muted small italic" v-else>-</span>
                                 </td>
 
                                 <td>
-                                    <button class="btn btn-sm btn-warning shadow-sm fw-bold px-3 py-1 rounded-3" @click="openEditModal(row)">
+                                    <button class="btn btn-sm btn-warning shadow-sm fw-bold px-3 py-1 rounded-pill" @click="openEditModal(row)">
                                         EDIT
                                     </button>
                                 </td>
                             </tr>
                             <tr v-if="data.length === 0">
-                                <td :colspan="metrics.length + 1" class="text-center py-5 text-muted">No dates generated.</td>
+                                <td :colspan="metrics.length + 1" class="text-center py-5 text-muted fw-bold">No dates generated.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -250,55 +250,26 @@ const getBgColor = (colorCode) => {
     letter-spacing: 0.5px;
 }
 
-.theme-dark-container {
-    background: linear-gradient(135deg, #09090b 0%, #18181b 100%);
-    min-height: calc(100vh - 140px);
-}
-
-.premium-dark-card {
-    background: #1e1e24; /* Very dark grayish blue */
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-}
-
-.dark-select {
-    background-color: #27272a;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2338bdf8' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
-}
-.dark-select:focus {
-    border-color: #0ea5e9;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
-}
-
-.shadow-inner-dark {
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
-    background: #111113;
-    border: 1px solid rgba(255,255,255,0.05);
-}
-
-.custom-dark-table {
+.custom-light-table {
     font-family: 'Inter', sans-serif;
-    --bs-table-bg: transparent;
-    --bs-table-color: #e2e8f0;
+    font-size: 0.9rem;
 }
 
-.custom-dark-table .header-row th {
-    background: rgba(255,255,255,0.02);
-    color: #94a3b8;
+.custom-light-table td, .custom-light-table th {
+    border: 1px solid #ddd !important;
+    vertical-align: middle;
+}
+
+.custom-light-table .header-row th {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
-    letter-spacing: 1px;
-    border-bottom: 2px solid rgba(255,255,255,0.1) !important;
-    padding: 18px 15px;
+    color: #475569;
+    background-color: #f1f5f9;
+    padding: 12px 10px;
 }
 
-.custom-dark-table td {
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    padding: 10px 15px;
-}
-
-.dark-row-hover:hover td {
-    background: rgba(255,255,255,0.03) !important;
+.table-row-hover:hover {
+    background-color: rgba(13, 110, 253, 0.03) !important;
 }
 
 .letter-spacing-1 {
