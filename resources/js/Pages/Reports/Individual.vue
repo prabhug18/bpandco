@@ -18,6 +18,7 @@ const props = defineProps({
     date_from: String,
     date_to: String,
     period: String,
+    growthPlan: Object,
 });
 
 const selectedMonth = ref(props.month);
@@ -336,6 +337,82 @@ const trafficLightSummary = computed(() => {
 });
 
 const printReport = () => { window.print(); };
+
+const showGrowthPlan = () => {
+    const plan = props.growthPlan;
+    if (!plan || !plan.items || plan.items.length === 0) {
+        Swal.fire({ icon: 'info', title: 'No Data', text: 'No performance data available for growth plan.', confirmButtonColor: '#003287' });
+        return;
+    }
+
+    const tierBg = { green: '#198754', yellow: '#ffc107', red: '#dc3545', grey: '#6c757d' };
+    const tierText = { green: '#fff', yellow: '#000', red: '#fff', grey: '#fff' };
+
+    let html = `<div style="text-align:left; font-family:'Inter',sans-serif; max-height:65vh; overflow-y:auto; padding-right:4px;">`;
+    html += `<p style="color:#94a3b8; font-size:0.85rem; margin-bottom:16px;">Based on performance in <strong style="color:#e2e8f0;">${plan.month}</strong> &nbsp;·&nbsp; Total Score: <strong style="color:#fbbf24; font-size:1.1rem;">${plan.totalScore}</strong></p>`;
+
+    plan.items.forEach(item => {
+        const bg = tierBg[item.currentTier] || '#6c757d';
+        const tc = tierText[item.currentTier] || '#fff';
+
+        html += `<div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px 16px; margin-bottom:12px;">`;
+        
+        // Header row
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
+        html += `<span style="font-weight:700; color:#e2e8f0; font-size:0.95rem; text-transform:uppercase;">${item.metricLabel}</span>`;
+        html += `<span style="background:${bg}; color:${tc}; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; text-transform:uppercase;">${item.currentTier} · ${item.earnedPoints} pts</span>`;
+        html += `</div>`;
+
+        // Current value
+        html += `<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:10px;">Current: <strong style="color:#e2e8f0;">${item.currentValueFormatted}</strong></div>`;
+
+        // Tier breakdown
+        html += `<div style="display:flex; flex-direction:column; gap:4px;">`;
+        item.tiers.forEach(tier => {
+            const isAchieved = tier.isAchieved;
+            const isCurrent = tier.isCurrent;
+            const borderColor = isCurrent ? tier.color : 'rgba(255,255,255,0.08)';
+            const opacity = isAchieved ? '1' : '0.6';
+
+            html += `<div style="display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:8px; border:1px solid ${borderColor}; opacity:${opacity}; background:${isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent'};">`;
+            html += `<span style="font-size:0.85rem;">${tier.emoji}</span>`;
+            html += `<span style="color:#cbd5e1; font-size:0.78rem; min-width:55px; font-weight:600; text-transform:capitalize;">${tier.label}</span>`;
+            html += `<span style="color:#94a3b8; font-size:0.72rem;">≥ ${tier.threshold} → ${tier.points} pts</span>`;
+
+            if (isAchieved) {
+                html += `<span style="margin-left:auto; color:#22c55e; font-size:0.72rem; font-weight:600;">✓ Done</span>`;
+            } else if (tier.gapText) {
+                html += `<span style="margin-left:auto; color:#fbbf24; font-size:0.72rem; font-weight:500;">${tier.gapText}</span>`;
+            }
+
+            html += `</div>`;
+        });
+        html += `</div>`;
+
+        // Advice
+        if (item.advice) {
+            const adviceColor = item.currentTier === 'green' ? '#22c55e' : '#fbbf24';
+            html += `<div style="margin-top:8px; padding:6px 10px; background:rgba(251,191,36,0.08); border-radius:6px; border-left:3px solid ${adviceColor};">`;
+            html += `<span style="color:${adviceColor}; font-size:0.78rem; font-weight:500;">${item.advice}</span>`;
+            html += `</div>`;
+        }
+
+        html += `</div>`;
+    });
+
+    html += `</div>`;
+
+    Swal.fire({
+        title: `📈 Growth Plan: ${plan.employeeName}`,
+        html: html,
+        width: 580,
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#e2e8f0',
+        confirmButtonText: 'Close Advice',
+        confirmButtonColor: '#003287',
+        customClass: { popup: 'growth-plan-popup', title: 'growth-plan-title' }
+    });
+};
 </script>
 
 <template>
@@ -370,6 +447,9 @@ const printReport = () => { window.print(); };
                                 {{ p.label }}
                             </button>
                         </div>
+                        <button v-if="growthPlan" class="btn btn-outline-warning shadow-sm rounded-pill px-4 fw-bold" @click="showGrowthPlan">
+                            <i class="bi bi-graph-up-arrow me-1"></i> GROWTH PLAN
+                        </button>
                         <button class="btn btn-outline-dark shadow-sm rounded-pill px-4 fw-bold" @click="printReport">
                             <i class="bi bi-printer me-1"></i> PRINT
                         </button>
@@ -646,6 +726,28 @@ const printReport = () => { window.print(); };
     line-height: 1.2;
 }
 
+/* Growth Plan Popup Styles */
+:deep(.growth-plan-popup) {
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5) !important;
+}
+:deep(.growth-plan-title) {
+    color: #fbbf24 !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 1.3rem !important;
+    letter-spacing: 0.3px !important;
+}
+:deep(.growth-plan-popup .swal2-html-container) {
+    padding: 0 8px !important;
+}
+:deep(.growth-plan-popup .swal2-html-container::-webkit-scrollbar) {
+    width: 4px;
+}
+:deep(.growth-plan-popup .swal2-html-container::-webkit-scrollbar-thumb) {
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+}
 </style>
 
 <style>

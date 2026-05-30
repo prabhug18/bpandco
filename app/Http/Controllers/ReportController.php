@@ -80,6 +80,9 @@ class ReportController extends Controller
                 ->get();
         }
 
+        // Build Growth Plan
+        $growthPlan = $this->buildGrowthPlan($user, $metrics, $scores, $monthStr);
+
         return Inertia::render('Reports/Individual', [
             'employee'     => $user,
             'allEmployees' => $allEmployees,
@@ -93,6 +96,7 @@ class ReportController extends Controller
             'date_from'    => $dateFrom,
             'date_to'      => $dateTo,
             'metric_id'    => $request->metric_id,
+            'growthPlan'   => $growthPlan,
         ]);
     }
 
@@ -136,5 +140,170 @@ class ReportController extends Controller
             'month'     => $month->format('Y-m'),
             'period'    => $period,
         ]);
+    }
+
+    /**
+     * Build Growth Plan advice for the employee.
+     */
+    private function buildGrowthPlan($user, $metrics, $scores, $monthStr): ?array
+    {
+        if (!$user || empty($metrics) || empty($scores)) {
+            return null;
+        }
+
+        $totalScore = 0;
+        $adviceItems = [];
+
+        // Tier order: green is best, grey is worst (for normal gte metrics)
+        $tierOrder = ['green' => 4, 'yellow' => 3, 'red' => 2, 'grey' => 1];
+        $tierEmoji = ['green' => '🟢', 'yellow' => '🟡', 'red' => '🔴', 'grey' => '⬜'];
+        $tierColors = ['green' => '#28a745', 'yellow' => '#ffc107', 'red' => '#dc3545', 'grey' => '#6c757d'];
+
+        foreach ($metrics as $metric) {
+            // Find the 30_days score, fall back to monthly
+            $score = $scores->first(fn($s) => $s->metric_id === $metric->id && $s->period_type === '30_days');
+            if (!$score) {
+                $score = $scores->first(fn($s) => $s->metric_id === $metric->id && $s->period_type === 'monthly');
+            }
+
+            $currentValue = $score ? floatval($score->cumulative_value) : 0;
+            $earnedPoints = $score ? floatval($score->period_points_earned) : 0;
+            $currentLight = $score->traffic_light ?? 'grey';
+            $totalScore += $earnedPoints;
+
+            // Get period targets (30_days or monthly) sorted by min_value desc
+            $targets = $metric->periodTargets
+                ->filter(fn($t) => in_array($t->period_type, ['30_days', 'monthly']))
+                ->sortByDesc('min_value')
+                ->values();
+
+            if ($targets->isEmpty()) continue;
+
+            $isInverse = $metric->comparison_type === 'lte'; // Late: lower is better
+            $isPercentage = $metric->value_type === 'percentage';
+
+            // Determine current tier rank
+            $currentTierRank = $tierOrder[$currentLight] ?? 0;
+
+            // Build tier breakdown
+            $tiers = [];
+            foreach ($targets as $target) {
+                $tierLabel = $target->tier_label;
+                $tierRank = $tierOrder[$tierLabel] ?? 0;
+                $minVal = floatval($target->min_value);
+                $pts = floatval($target->points_awarded);
+
+                $tierInfo = [
+                    'label' => $tierLabel,
+                    'emoji' => $tierEmoji[$tierLabel] ?? '⬜',
+                    'color' => $tierColors[$tierLabel] ?? '#6c757d',
+                    'threshold' => $minVal,
+                    'points' => $pts,
+                    'gap' => null,
+                    'gapText' => null,
+                    'isCurrent' => $tierLabel === $currentLight,
+                    'isAchieved' => $tierRank <= $currentTierRank,
+                ];
+
+                // Calculate gap to this tier
+                if ($isInverse) {
+                    // For inverse metrics: achieved if value <= threshold
+                    $tierInfo['isAchieved'] = $currentValue <= $minVal;
+                    if (!$tierInfo['isAchieved']) {
+                        $gap = $currentValue - $minVal;
+                        $tierInfo['gap'] = $gap;
+                        $tierInfo['gapText'] = 'Reduce by ' . $this->formatValue($gap, $metric) . ' to reach';
+                    }
+                } else {
+                    // For normal metrics: achieved if value >= threshold
+                    if ($isPercentage) {
+                        $tierInfo['isAchieved'] = $currentValue >= $minVal;
+                        if (!$tierInfo['isAchieved']) {
+                            $gap = $minVal - $currentValue;
+                            $tierInfo['gap'] = $gap;
+                            $tierInfo['gapText'] = 'Need ' . number_format($gap, 1) . '% more to reach';
+                        }
+                    } else {
+                        $tierInfo['isAchieved'] = $currentValue >= $minVal;
+                        if (!$tierInfo['isAchieved']) {
+                            $gap = $minVal - $currentValue;
+                            $tierInfo['gap'] = $gap;
+                            $tierInfo['gapText'] = 'Need ' . $this->formatValue($gap, $metric) . ' more to reach';
+                        }
+                    }
+                }
+
+                $tiers[] = $tierInfo;
+            }
+
+            // Generate advice text
+            $advice = '';
+            if ($currentTierRank >= 4 || ($isInverse && $currentLight === 'green')) {
+                $advice = '✅ On track! Maintaining Green tier.';
+            } elseif ($isInverse) {
+                $greenTarget = $targets->firstWhere('tier_label', 'green');
+                if ($greenTarget) {
+                    $advice = 'Keep at or below ' . $this->formatValue(floatval($greenTarget->min_value), $metric) . ' to maintain Green (' . floatval($greenTarget->points_awarded) . ' pts).';
+                }
+            } else {
+                // Find the next tier up
+                $nextTier = collect($tiers)
+                    ->filter(fn($t) => !$t['isAchieved'] && $t['gap'] !== null)
+                    ->sortBy('threshold')
+                    ->first();
+                if ($nextTier) {
+                    $advice = $nextTier['gapText'] . ' ' . $nextTier['emoji'] . ' ' . ucfirst($nextTier['label']) . ' (' . $nextTier['points'] . ' pts).';
+                }
+            }
+
+            $adviceItems[] = [
+                'metricId' => $metric->id,
+                'metricLabel' => $metric->label,
+                'metricKey' => $metric->key,
+                'unit' => $metric->unit,
+                'isInverse' => $isInverse,
+                'isPercentage' => $isPercentage,
+                'currentValue' => $currentValue,
+                'currentValueFormatted' => $this->formatValue($currentValue, $metric),
+                'currentTier' => $currentLight,
+                'earnedPoints' => $earnedPoints,
+                'advice' => $advice,
+                'tiers' => $tiers,
+            ];
+        }
+
+        return [
+            'employeeName' => $user->name,
+            'month' => $monthStr,
+            'totalScore' => round($totalScore, 2),
+            'items' => $adviceItems,
+        ];
+    }
+
+    /**
+     * Format a metric value with proper units.
+     */
+    private function formatValue(float $value, $metric): string
+    {
+        $unit = strtolower($metric->unit ?? '');
+
+        if (in_array($unit, ['amount', 'rupees', 'inr', '₹'])) {
+            if ($value >= 100000) {
+                return '₹' . number_format($value / 100000, 2) . 'L';
+            } elseif ($value >= 1000) {
+                return '₹' . number_format($value / 1000, 1) . 'K';
+            }
+            return '₹' . number_format($value, 0);
+        }
+
+        if (in_array($unit, ['percentage', '%'])) {
+            return number_format($value, 1) . '%';
+        }
+
+        // For count, ltr, boxes, leaves, time, etc.
+        if ($value == intval($value)) {
+            return number_format($value, 0) . ' ' . $metric->unit;
+        }
+        return number_format($value, 1) . ' ' . $metric->unit;
     }
 }
