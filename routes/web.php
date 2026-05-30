@@ -85,6 +85,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('settings', [SettingController::class, 'index'])->name('settings.index')->middleware('can:manage system settings');
         Route::post('settings', [SettingController::class, 'update'])->name('settings.update')->middleware('can:manage system settings');
+        
+        // Data Editor (Overrides)
+        Route::get('edit-data', [\App\Http\Controllers\Admin\DataEditController::class, 'index'])->name('data.edit')->middleware('can:manage data');
+        Route::post('edit-data/update', [\App\Http\Controllers\Admin\DataEditController::class, 'update'])->name('data.update')->middleware('can:manage data');
     });
 });
 

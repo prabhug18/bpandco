@@ -146,6 +146,11 @@ watch(() => page.props.flash, (flash) => {
                                 <i class="bi bi-cpu"></i><span> System Settings</span>
                             </Link>
                         </li>
+                        <li v-if="$page.props.auth.user.permissions.includes('manage data')">
+                            <Link :href="route('admin.data.edit')" :class="{ 'active': route().current('admin.data.*') }">
+                                <i class="bi bi-database-check"></i><span> Data Editor</span>
+                            </Link>
+                        </li>
                     </ul>
                 </li>
             </ul>
