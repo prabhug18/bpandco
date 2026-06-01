@@ -345,62 +345,39 @@ const showGrowthPlan = () => {
         return;
     }
 
-    const tierBg = { green: '#198754', yellow: '#ffc107', red: '#dc3545', grey: '#6c757d' };
-    const tierText = { green: '#fff', yellow: '#000', red: '#fff', grey: '#fff' };
-
     let html = `<div style="text-align:left; font-family:'Inter',sans-serif; max-height:65vh; overflow-y:auto; padding-right:4px;">`;
-    html += `<p style="color:#94a3b8; font-size:0.85rem; margin-bottom:16px;">Based on performance in <strong style="color:#e2e8f0;">${plan.month}</strong> &nbsp;·&nbsp; Total Score: <strong style="color:#fbbf24; font-size:1.1rem;">${plan.totalScore}</strong></p>`;
+    html += `<p style="color:#cbd5e1; font-size:0.9rem; margin-bottom:16px;">Based on performance in <strong style="color:#fff;">${plan.month}</strong> &nbsp;·&nbsp; Total Score: <strong style="color:#fbbf24; font-size:1.1rem;">${plan.totalScore}</strong></p>`;
+
+    html += `<div style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:16px;">`;
 
     plan.items.forEach(item => {
-        const bg = tierBg[item.currentTier] || '#6c757d';
-        const tc = tierText[item.currentTier] || '#fff';
+        const greenTier = item.tiers.find(t => t.label === 'green');
+        if (!greenTier) return;
 
-        html += `<div style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px 16px; margin-bottom:12px;">`;
-        
-        // Header row
-        html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`;
-        html += `<span style="font-weight:700; color:#e2e8f0; font-size:0.95rem; text-transform:uppercase;">${item.metricLabel}</span>`;
-        html += `<span style="background:${bg}; color:${tc}; padding:3px 12px; border-radius:20px; font-size:0.7rem; font-weight:700; text-transform:uppercase;">${item.currentTier} · ${item.earnedPoints} pts</span>`;
-        html += `</div>`;
+        let emoji = '🎯';
+        const lbl = item.metricLabel.toLowerCase();
+        if (lbl.includes('sales')) emoji = '💼';
+        else if (lbl.includes('collection')) emoji = '💰';
+        else if (lbl.includes('attendance')) emoji = '⚠️';
+        else if (lbl.includes('late')) emoji = '⏱️';
+        else if (lbl.includes('colour') || lbl.includes('color')) emoji = '🎨';
+        else if (lbl.includes('customer')) emoji = '🤝';
+        else if (lbl.includes('stock')) emoji = '📦';
 
-        // Current value
-        html += `<div style="color:#94a3b8; font-size:0.8rem; margin-bottom:10px;">Current: <strong style="color:#e2e8f0;">${item.currentValueFormatted}</strong></div>`;
-
-        // Tier breakdown
-        html += `<div style="display:flex; flex-direction:column; gap:4px;">`;
-        item.tiers.forEach(tier => {
-            const isAchieved = tier.isAchieved;
-            const isCurrent = tier.isCurrent;
-            const borderColor = isCurrent ? tier.color : 'rgba(255,255,255,0.08)';
-            const opacity = isAchieved ? '1' : '0.6';
-
-            html += `<div style="display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:8px; border:1px solid ${borderColor}; opacity:${opacity}; background:${isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent'};">`;
-            html += `<span style="font-size:0.85rem;">${tier.emoji}</span>`;
-            html += `<span style="color:#cbd5e1; font-size:0.78rem; min-width:55px; font-weight:600; text-transform:capitalize;">${tier.label}</span>`;
-            html += `<span style="color:#94a3b8; font-size:0.72rem;">≥ ${tier.threshold} → ${tier.points} pts</span>`;
-
-            if (isAchieved) {
-                html += `<span style="margin-left:auto; color:#22c55e; font-size:0.72rem; font-weight:600;">✓ Done</span>`;
-            } else if (tier.gapText) {
-                html += `<span style="margin-left:auto; color:#fbbf24; font-size:0.72rem; font-weight:500;">${tier.gapText}</span>`;
-            }
-
-            html += `</div>`;
-        });
-        html += `</div>`;
-
-        // Advice
-        if (item.advice) {
-            const adviceColor = item.currentTier === 'green' ? '#22c55e' : '#fbbf24';
-            html += `<div style="margin-top:8px; padding:6px 10px; background:rgba(251,191,36,0.08); border-radius:6px; border-left:3px solid ${adviceColor};">`;
-            html += `<span style="color:${adviceColor}; font-size:0.78rem; font-weight:500;">${item.advice}</span>`;
-            html += `</div>`;
+        let text = '';
+        if (greenTier.isAchieved) {
+            text = `<strong style="color:#fff;">${item.metricLabel}</strong>: Currently at <strong style="color:#fbbf24;">${item.currentValueFormatted}</strong>. <span style="color:#22c55e; font-weight:600;">✅ Maxed out points!</span>`;
+        } else {
+            text = `<strong style="color:#fff;">${item.metricLabel}</strong>: Currently at <strong style="color:#fbbf24;">${item.currentValueFormatted}</strong>. ${greenTier.gapText} Green (${greenTier.points} pts).`;
         }
 
+        html += `<div style="display:flex; align-items:flex-start; gap:12px;">`;
+        html += `<span style="font-size:1.15rem; line-height:1.2;">${emoji}</span>`;
+        html += `<span style="color:#e2e8f0; font-size:0.95rem; line-height:1.5;">${text}</span>`;
         html += `</div>`;
     });
 
-    html += `</div>`;
+    html += `</div></div>`;
 
     Swal.fire({
         title: `📈 Growth Plan: ${plan.employeeName}`,
