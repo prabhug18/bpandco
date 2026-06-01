@@ -28,7 +28,7 @@ const selectUser = (id) => {
     applyFilters();
 };
 
-const printReport = () => { window.print(); };
+
 
 // --- Editing Workflow ---
 const editForm = useForm({
@@ -138,9 +138,7 @@ const getBgColor = (colorCode) => {
                     <input type="date" class="form-control form-control-sm border-0 bg-transparent shadow-none" v-model="dateTo" @change="applyFilters">
                 </div>
 
-                <button class="btn btn-outline-dark shadow-sm rounded-pill px-4 fw-bold" @click="printReport">
-                    <i class="bi bi-printer me-1"></i> Export PDF
-                </button>
+
             </div>
         </div>
 
