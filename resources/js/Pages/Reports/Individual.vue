@@ -345,8 +345,20 @@ const showGrowthPlan = () => {
         return;
     }
 
+    const totalScore = parseFloat(plan.totalScore) || 0;
+    let pointsNeededText = '';
+    if (totalScore >= 70) {
+        pointsNeededText = `<strong style="color:#22c55e;">You have achieved overall Green!</strong>`;
+    } else {
+        const needed = (70 - totalScore).toFixed(1);
+        pointsNeededText = `You need <strong style="color:#fbbf24;">${needed} more points</strong> to reach overall Green.`;
+    }
+
     let html = `<div style="text-align:left; font-family:'Inter',sans-serif; max-height:65vh; overflow-y:auto; padding-right:4px;">`;
-    html += `<p style="color:#cbd5e1; font-size:0.9rem; margin-bottom:16px;">Based on performance in <strong style="color:#fff;">${plan.month}</strong> &nbsp;·&nbsp; Total Score: <strong style="color:#fbbf24; font-size:1.1rem;">${plan.totalScore}</strong></p>`;
+    html += `<div style="margin-bottom:16px; color:#cbd5e1; font-size:0.95rem; line-height:1.5;">`;
+    html += `Based on performance in <strong style="color:#fff;">${plan.month}</strong> &nbsp;·&nbsp; Total Score: <strong style="color:#fbbf24; font-size:1.1rem;">${plan.totalScore}</strong><br>`;
+    html += `${pointsNeededText}`;
+    html += `</div>`;
 
     html += `<div style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:16px;">`;
 
@@ -366,9 +378,10 @@ const showGrowthPlan = () => {
 
         let text = '';
         if (greenTier.isAchieved) {
-            text = `<strong style="color:#fff;">${item.metricLabel}</strong>: Currently at <strong style="color:#fbbf24;">${item.currentValueFormatted}</strong>. <span style="color:#22c55e; font-weight:600;">✅ Maxed out points!</span>`;
+            text = `<strong style="color:#fff;">Achieve ${parseFloat(greenTier.points)} pts in ${item.metricLabel}</strong>. <span style="color:#22c55e; font-weight:600;">✅ Maxed out!</span>`;
         } else {
-            text = `<strong style="color:#fff;">${item.metricLabel}</strong>: Currently at <strong style="color:#fbbf24;">${item.currentValueFormatted}</strong>. ${greenTier.gapText} Green (${greenTier.points} pts).`;
+            let action = greenTier.gapText ? greenTier.gapText.replace(' to reach', '') : `Need ${greenTier.gap} more`;
+            text = `<strong style="color:#fff;">Achieve ${parseFloat(greenTier.points)} pts in ${item.metricLabel}</strong>. <span style="color:#cbd5e1;">(${action} to max out)</span>`;
         }
 
         html += `<div style="display:flex; align-items:flex-start; gap:12px;">`;
@@ -397,8 +410,8 @@ const showGrowthPlan = () => {
     <AuthenticatedLayout>
         <div class="bg-white border-bottom shadow-sm d-print-none">
             <div class="px-4 py-3">
-                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                    <div class="d-flex align-items-center gap-3">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+                    <div class="d-flex flex-column gap-3">
                         <div>
                             <h4 class="fw-bold mb-0 banner-title text-uppercase">Individual Performance Report</h4>
                             <p class="text-muted small mb-0">
@@ -406,7 +419,7 @@ const showGrowthPlan = () => {
                                 <span v-else>Please select a staff member to view report</span>
                             </p>
                         </div>
-                        <div v-if="allEmployees && allEmployees.length > 0" class="ms-lg-4">
+                        <div v-if="allEmployees && allEmployees.length > 0">
                             <select class="form-select glass-input border shadow-none w-auto fw-bold text-primary px-4 rounded-pill" v-model="selectedEmployeeId" @change="onEmployeeChange">
                                 <option value="" disabled>-- SELECT STAFF MEMBER --</option>
                                 <option v-for="emp in allEmployees" :key="emp.id" :value="emp.id">STAFF: {{ emp.name.toUpperCase() }}</option>
@@ -414,34 +427,38 @@ const showGrowthPlan = () => {
                         </div>
                     </div>
                     
-                    <div v-if="hasSelection" class="d-flex flex-wrap align-items-center gap-2">
-                        <div class="bg-light p-1 rounded-pill d-flex border shadow-sm me-2">
-                            <button v-for="p in periods" :key="p.key"
-                                class="btn rounded-pill px-3 py-1 fw-bold"
-                                :class="activePeriod === p.key ? 'btn-primary shadow-sm' : 'btn-light text-muted'"
-                                style="font-size: 0.7rem;"
-                                @click="applyFilter(p.key)">
-                                {{ p.label }}
+                    <div v-if="hasSelection" class="d-flex flex-column align-items-lg-end gap-3 mt-lg-0 mt-3">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="bg-light p-1 rounded-pill d-flex border shadow-sm">
+                                <button v-for="p in periods" :key="p.key"
+                                    class="btn rounded-pill px-3 py-1 fw-bold"
+                                    :class="activePeriod === p.key ? 'btn-primary shadow-sm' : 'btn-light text-muted'"
+                                    style="font-size: 0.75rem;"
+                                    @click="applyFilter(p.key)">
+                                    {{ p.label }}
+                                </button>
+                            </div>
+                            <button v-if="growthPlan" class="btn btn-outline-warning shadow-sm rounded-pill px-4 py-1 fw-bold" style="font-size: 0.85rem;" @click="showGrowthPlan">
+                                <i class="bi bi-graph-up-arrow me-1"></i> GROWTH PLAN
+                            </button>
+                            <button class="btn btn-outline-dark shadow-sm rounded-pill px-4 py-1 fw-bold" style="font-size: 0.85rem;" @click="printReport">
+                                <i class="bi bi-printer me-1"></i> PRINT
                             </button>
                         </div>
-                        <button v-if="growthPlan" class="btn btn-outline-warning shadow-sm rounded-pill px-4 fw-bold" @click="showGrowthPlan">
-                            <i class="bi bi-graph-up-arrow me-1"></i> GROWTH PLAN
-                        </button>
-                        <button class="btn btn-outline-dark shadow-sm rounded-pill px-4 fw-bold" @click="printReport">
-                            <i class="bi bi-printer me-1"></i> PRINT
-                        </button>
-                    </div>
 
-                    <!-- Custom Date Range Row -->
-                    <div v-if="activePeriod === 'custom'" class="row g-2 mt-2 fadeIn bg-light p-2 rounded-3 border">
-                        <div class="col-md-4">
-                            <input type="date" class="form-control form-control-sm glass-input" v-model="customFrom">
-                        </div>
-                        <div class="col-md-4">
-                            <input type="date" class="form-control form-control-sm glass-input" v-model="customTo">
-                        </div>
-                        <div class="col-md-4">
-                            <button class="btn btn-sm btn-dark w-100 fw-bold" @click="applyFilter('custom')">APPLY DATES</button>
+                        <!-- Custom Date Range Row -->
+                        <div v-if="activePeriod === 'custom'" class="fadeIn bg-light px-3 py-2 rounded-pill border shadow-sm d-flex flex-wrap align-items-center gap-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-muted small fw-bold">FROM:</span>
+                                <input type="date" class="form-control border-0 bg-transparent shadow-none px-0" style="width: 130px; font-weight: 600;" v-model="customFrom">
+                            </div>
+                            <div class="d-flex align-items-center gap-2 border-start ps-3">
+                                <span class="text-muted small fw-bold">TO:</span>
+                                <input type="date" class="form-control border-0 bg-transparent shadow-none px-0" style="width: 130px; font-weight: 600;" v-model="customTo">
+                            </div>
+                            <div class="border-start ps-3">
+                                <button class="btn btn-dark rounded-pill px-4 py-1 fw-bold" style="font-size: 0.8rem;" @click="applyFilter('custom')">APPLY</button>
+                            </div>
                         </div>
                     </div>
                 </div>
