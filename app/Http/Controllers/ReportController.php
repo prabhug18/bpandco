@@ -151,6 +151,10 @@ class ReportController extends Controller
             return null;
         }
 
+        $month = \Carbon\Carbon::parse($monthStr);
+        $dateFrom = $month->copy()->startOfMonth()->toDateString();
+        $dateTo = $month->copy()->endOfMonth()->toDateString();
+
         $totalScore = 0;
         $adviceItems = [];
 
@@ -216,7 +220,37 @@ class ReportController extends Controller
                     }
                 } else {
                     // For normal metrics: achieved if value >= threshold
-                    if ($isPercentage) {
+                    if (str_contains(strtolower($metric->key), 'collection') || str_contains(strtolower($metric->label), 'collection')) {
+                        $tierInfo['isAchieved'] = $currentValue >= $minVal;
+                        if (!$tierInfo['isAchieved']) {
+                            // Calculate dynamic pending collection amount
+                            $refMetricId = $metric->reference_metric_id;
+                            $refValue = 0;
+                            if ($refMetricId) {
+                                $refValue = \App\Models\Slip::where('user_id', $user->id)
+                                    ->where('metric_id', $refMetricId)
+                                    ->where('status', 'approved')
+                                    ->whereBetween('date', [$dateFrom, $dateTo])
+                                    ->sum('value') ?? 0;
+                            }
+                            $currentCollection = \App\Models\Slip::where('user_id', $user->id)
+                                ->where('metric_id', $metric->id)
+                                ->where('status', 'approved')
+                                ->whereBetween('date', [$dateFrom, $dateTo])
+                                ->sum('value') ?? 0;
+
+                            $targetAmount = ($minVal / 100) * $refValue;
+                            $gapAmount = $targetAmount - $currentCollection;
+
+                            if ($gapAmount > 0) {
+                                $tierInfo['gap'] = $gapAmount;
+                                $tierInfo['gapText'] = 'Need ' . $this->formatValue($gapAmount, $metric) . ' more to reach';
+                            } else {
+                                $tierInfo['gap'] = 0;
+                                $tierInfo['gapText'] = 'no pending collection to reach';
+                            }
+                        }
+                    } elseif ($isPercentage) {
                         $tierInfo['isAchieved'] = $currentValue >= $minVal;
                         if (!$tierInfo['isAchieved']) {
                             $gap = $minVal - $currentValue;
