@@ -9,6 +9,7 @@ const props = defineProps({
     metricscores: Array,
     roleMetrics:  Array,
     month:        String,
+    monthStr:     String,
     period:       String,
     dateFrom:     String,
     dateTo:       String,
@@ -33,10 +34,22 @@ const periods = [
     { key: 'custom',     label: 'CUSTOM' },
 ];
 
+const handleMonthChange = (e) => {
+    router.get(route('dashboard'), {
+        month: e.target.value,
+        period: activePeriod.value,
+        staff_id: props.teamStats?.selectedStaffId
+    }, { preserveState: true });
+};
+
 const setPeriod = (key) => {
     activePeriod.value = key;
     if (key !== 'custom') {
-        router.get(route('dashboard'), { period: key, staff_id: props.teamStats?.selectedStaffId }, { preserveState: true });
+        router.get(route('dashboard'), { 
+            period: key, 
+            staff_id: props.teamStats?.selectedStaffId,
+            month: props.monthStr
+        }, { preserveState: true });
     }
 };
 
@@ -45,7 +58,8 @@ const applyCustom = () => {
         period: 'custom', 
         date_from: customFrom.value, 
         date_to: customTo.value,
-        staff_id: props.teamStats?.selectedStaffId 
+        staff_id: props.teamStats?.selectedStaffId,
+        month: props.monthStr
     }, { preserveState: true });
 };
 
@@ -70,7 +84,8 @@ const searchTile = (metric) => {
         tile_from:    tileDateFrom.value,
         tile_to:      tileDateTo.value,
         show_details: metric.id,
-        staff_id:     props.teamStats?.selectedStaffId
+        staff_id:     props.teamStats?.selectedStaffId,
+        month:        props.monthStr
     }, { preserveState: true });
 };
 
@@ -116,7 +131,8 @@ const closeDetails = () => {
         period:    activePeriod.value,
         tile_from: tileDateFrom.value,
         tile_to:   tileDateTo.value,
-        staff_id:  props.teamStats?.selectedStaffId
+        staff_id:  props.teamStats?.selectedStaffId,
+        month:     props.monthStr
     }, { preserveState: true, preserveScroll: true });
 };
 
@@ -233,7 +249,7 @@ const handleReview = (metricId = null) => {
                                 <h6 class="text-muted small fw-bold mb-2 text-uppercase">Select Staff</h6>
                                 <select class="form-select form-select-sm glass-input cursor-pointer" 
                                     :value="teamStats.selectedStaffId || ''"
-                                    @change="e => $inertia.get(route('dashboard'), { staff_id: e.target.value }, { preserveState: true })">
+                                    @change="e => $inertia.get(route('dashboard'), { staff_id: e.target.value, period: activePeriod, month: props.monthStr }, { preserveState: true })">
                                     <option value="">-- Choose Staff --</option>
                                     <option v-for="staff in teamStats.allStaff" :key="staff.id" :value="staff.id">
                                         {{ staff.name }}
@@ -282,7 +298,14 @@ const handleReview = (metricId = null) => {
                     <!-- Dynamic Period Selector -->
                     <div class="d-flex flex-column mb-4 gap-3">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                            <h5 class="fw-bold text-dark title-font mb-0"><i class="bi bi-grid-fill text-primary me-2"></i>Daily Submission Modules</h5>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <h5 class="fw-bold text-dark title-font mb-0"><i class="bi bi-grid-fill text-primary me-2"></i>Daily Submission Modules</h5>
+                                <input type="month" 
+                                    class="form-control form-control-sm glass-input py-1 px-2 cursor-pointer shadow-sm border" 
+                                    style="width: 160px; font-size: 0.85rem; height: 32px;"
+                                    :value="monthStr" 
+                                    @change="handleMonthChange">
+                            </div>
                             
                             <div class="period-scroll-container">
                                 <div class="bg-white p-1 rounded-pill shadow-sm d-flex border gap-1 flex-nowrap w-100">

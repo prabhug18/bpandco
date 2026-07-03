@@ -16,14 +16,17 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $authUser = auth()->user();
-        $month    = Carbon::today()->format('Y-m');
+        
+        // Parse selected month or default to current month (e.g. '2026-07')
+        $monthStr = $request->month ? Carbon::parse($request->month)->format('Y-m') : Carbon::today()->format('Y-m');
+        
         // Custom dates if provided (global or per-tile)
         $dateFrom = $request->tile_from ?? $request->date_from;
         $dateTo   = $request->tile_to   ?? $request->date_to;
         $period   = $request->period    ?? 'this_month';
 
         if (!$dateFrom || !$dateTo) {
-            [$dateFrom, $dateTo] = $this->resolvePeriod($period);
+            [$dateFrom, $dateTo] = $this->resolvePeriod($period, $monthStr);
         }
 
         $targetUser = $authUser;
@@ -32,13 +35,17 @@ class DashboardController extends Controller
             if ($staff) $targetUser = $staff;
         }
 
-        // --- Performance Scores (Matching the Period if possible) ---
+        // --- Performance Scores (Matching the Period and Month) ---
         // If it's a standard 10/20/30 day period, we pull from performance_scores table
         $scorePeriodType = in_array($period, ['10_days', '20_days', '30_days']) ? $period : '30_days';
+        
+        // Match the month of the target end date (which aligns with the selected period/month)
+        $scoreMonthStart = Carbon::parse($dateTo)->startOfMonth()->toDateString();
         
         $metricscores = PerformanceScore::with('metric')
             ->where('user_id', $targetUser->id)
             ->where('period_type', $scorePeriodType)
+            ->where('period_start', $scoreMonthStart)
             ->get();
 
         // --- Role Metrics with Aggregate Values ---
@@ -58,7 +65,7 @@ class DashboardController extends Controller
             });
 
         $summary = SummaryReport::where('user_id', $targetUser->id)
-            ->where('year_month', $month)
+            ->where('year_month', $monthStr)
             ->first();
 
         $slipReport = Slip::with('metric')
@@ -74,7 +81,7 @@ class DashboardController extends Controller
             $teamStats = [
                 'total_users'     => User::whereHas('roles', fn($q) => $q->where('name', '!=', 'admin'))->count(),
                 'pending_slips'   => Slip::where('status', 'pending')->count(),
-                'avg_total_score' => SummaryReport::where('year_month', $month)->avg('total_mark') ?? 0,
+                'avg_total_score' => SummaryReport::where('year_month', $monthStr)->avg('total_mark') ?? 0,
                 'allStaff'        => User::whereHas('roles', fn($q) => $q->where('name', '!=', 'admin'))->select('id', 'name')->get(),
                 'selectedStaffId' => $request->staff_id ?? '',
                 'targetName'      => ($targetUser->id !== $authUser->id) ? $targetUser->name : 'Me',
@@ -85,7 +92,8 @@ class DashboardController extends Controller
             'summary'       => $summary,
             'metricscores'  => $metricscores,
             'roleMetrics'   => $roleMetrics,
-            'month'         => Carbon::today()->format('F Y'),
+            'month'         => Carbon::parse($monthStr)->format('F Y'),
+            'monthStr'      => $monthStr,
             'period'        => $period,
             'dateFrom'      => $dateFrom,
             'dateTo'        => $dateTo,
@@ -95,19 +103,26 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function resolvePeriod(string $period): array
+    private function resolvePeriod(string $period, string $monthStr): array
     {
+        $monthDate = Carbon::parse($monthStr);
         $today = Carbon::today();
+        
+        $isCurrentMonth = $monthDate->isCurrentMonth();
+
         return match($period) {
-            '10_days'     => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->startOfMonth()->addDays(9)->toDateString()],
-            '20_days'     => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->startOfMonth()->addDays(19)->toDateString()],
-            '30_days'     => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->startOfMonth()->addDays(29)->toDateString()],
+            '10_days'     => [$monthDate->copy()->startOfMonth()->toDateString(), $monthDate->copy()->startOfMonth()->addDays(9)->toDateString()],
+            '20_days'     => [$monthDate->copy()->startOfMonth()->toDateString(), $monthDate->copy()->startOfMonth()->addDays(19)->toDateString()],
+            '30_days'     => [$monthDate->copy()->startOfMonth()->toDateString(), $monthDate->copy()->startOfMonth()->addDays(29)->toDateString()],
             'this_week'   => [$today->copy()->startOfWeek()->toDateString(), $today->toDateString()],
-            '3_months'    => [$today->copy()->subMonths(3)->toDateString(), $today->toDateString()],
-            '6_months'    => [$today->copy()->subMonths(6)->toDateString(), $today->toDateString()],
-            '9_months'    => [$today->copy()->subMonths(9)->toDateString(), $today->toDateString()],
-            '1_year'      => [$today->copy()->subYear()->toDateString(), $today->toDateString()],
-            default       => [$today->copy()->startOfMonth()->toDateString(), $today->toDateString()], // this_month
+            '3_months'    => [$monthDate->copy()->subMonths(3)->toDateString(), $monthDate->toDateString()],
+            '6_months'    => [$monthDate->copy()->subMonths(6)->toDateString(), $monthDate->toDateString()],
+            '9_months'    => [$monthDate->copy()->subMonths(9)->toDateString(), $monthDate->toDateString()],
+            '1_year'      => [$monthDate->copy()->subYear()->toDateString(), $monthDate->toDateString()],
+            default       => [
+                $monthDate->copy()->startOfMonth()->toDateString(),
+                $isCurrentMonth ? $today->toDateString() : $monthDate->copy()->endOfMonth()->toDateString()
+            ], // this_month
         };
     }
 }
