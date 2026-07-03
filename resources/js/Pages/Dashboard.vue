@@ -160,8 +160,18 @@ const totalScore = computed(() =>
     props.metricscores.reduce((sum, s) => sum + parseFloat(s.period_points_earned || 0), 0).toFixed(0)
 );
 
-const getScoreForMetric = (metricId) =>
-    props.metricscores.find(s => s.metric_id === metricId);
+const getScoreForMetric = (metricId) => {
+    const scores = props.metricscores.filter(s => s.metric_id === metricId);
+    if (scores.length === 0) return null;
+    
+    const period_points_earned = scores.reduce((sum, s) => sum + parseFloat(s.period_points_earned || 0), 0);
+    const latestScore = [...scores].sort((a, b) => new Date(b.period_start) - new Date(a.period_start))[0];
+    
+    return {
+        period_points_earned: period_points_earned > 0 ? parseFloat(period_points_earned.toFixed(1)) : 0,
+        traffic_light: latestScore?.traffic_light
+    };
+};
 
 const formatVal = (val) => {
     const num = parseFloat(val);

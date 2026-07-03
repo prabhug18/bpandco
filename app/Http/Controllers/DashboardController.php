@@ -35,17 +35,14 @@ class DashboardController extends Controller
             if ($staff) $targetUser = $staff;
         }
 
-        // --- Performance Scores (Matching the Period and Month) ---
+        // --- Performance Scores (Matching the Period Range) ---
         // If it's a standard 10/20/30 day period, we pull from performance_scores table
         $scorePeriodType = in_array($period, ['10_days', '20_days', '30_days']) ? $period : '30_days';
-        
-        // Match the month of the target end date (which aligns with the selected period/month)
-        $scoreMonthStart = Carbon::parse($dateTo)->startOfMonth()->toDateString();
         
         $metricscores = PerformanceScore::with('metric')
             ->where('user_id', $targetUser->id)
             ->where('period_type', $scorePeriodType)
-            ->where('period_start', $scoreMonthStart)
+            ->whereBetween('period_start', [$dateFrom, $dateTo])
             ->get();
 
         // --- Role Metrics with Aggregate Values ---
