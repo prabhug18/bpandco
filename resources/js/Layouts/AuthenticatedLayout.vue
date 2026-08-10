@@ -95,7 +95,16 @@ watch(() => page.props.flash, (flash) => {
                                 <i class="bi bi-file-earmark-spreadsheet"></i><span> My Report</span>
                             </Link>
                         </li>
-                        <!-- Team Report hidden by request -->
+                        <li v-if="$page.props.auth.user.permissions.includes('approve slips')">
+                            <Link :href="route('reports.team')" :class="{ 'active': route().current('reports.team') }">
+                                <i class="bi bi-grid-3x3-gap"></i><span> Traffic Light Report</span>
+                            </Link>
+                        </li>
+                        <li v-if="$page.props.auth.user.permissions.includes('approve slips')">
+                            <Link :href="route('reports.greenscore')" :class="{ 'active': route().current('reports.greenscore') }">
+                                <i class="bi bi-trophy"></i><span> Greenscore Leaderboard</span>
+                            </Link>
+                        </li>
                         <li v-if="$page.props.auth.user.permissions.includes('configure incentives')">
                             <Link :href="route('reports.incentives')" :class="{ 'active': route().current('reports.incentives') }">
                                 <i class="bi bi-cash-coin"></i><span> Incentive Payables</span>

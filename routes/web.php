@@ -42,7 +42,7 @@ Route::middleware('auth')->group(function () {
     // Phase 3: Attendance Module
     Route::resource('attendance', AttendanceController::class)->only(['index', 'store']);
 
-    // Phase 4: Approval Queue (Supervisor + Admin only)
+    // Phase 4: Approval Queue & Reports (Supervisor + Admin only)
     Route::middleware(['can:approve slips'])->group(function () {
         Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
         Route::patch('approvals/slips/{slip}/approve', [ApprovalController::class, 'approveSlip'])->name('approvals.slips.approve');
@@ -54,11 +54,14 @@ Route::middleware('auth')->group(function () {
         Route::patch('approvals/attendance/{attendance}/reject', [ApprovalController::class, 'rejectAttendance'])->name('approvals.attendance.reject');
         Route::post('approvals/attendance/bulk/approve', [ApprovalController::class, 'bulkApproveAttendance'])->name('approvals.attendance.bulk-approve');
         Route::post('approvals/attendance/bulk/reject', [ApprovalController::class, 'bulkRejectAttendance'])->name('approvals.attendance.bulk-reject');
+
+        // Admin & Supervisor Only Reports
+        Route::get('reports/team', [ReportController::class, 'team'])->name('reports.team');
+        Route::get('reports/greenscore', [ReportController::class, 'greenscore'])->name('reports.greenscore');
     });
 
     // Phase 6: Reports
     Route::get('reports/individual', [ReportController::class, 'individual'])->name('reports.individual');
-    // Route::get('reports/team', [ReportController::class, 'team'])->name('reports.team');
 
     // Phase 8.4: Incentive & Increment Reports (Admin/Supervisor)
     Route::middleware(['can:configure incentives'])->group(function () {

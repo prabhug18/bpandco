@@ -120,25 +120,158 @@ class ReportController extends Controller
     {
         $month  = $request->month ? Carbon::parse($request->month) : Carbon::today();
         $period = $request->period ?? '30_days'; // default: 30-day consolidated
-        $monthStart = $month->copy()->startOfMonth();
-        $monthEnd   = $month->copy()->endOfMonth();
+        $monthStart = $month->copy()->startOfMonth()->toDateString();
+        $monthEnd   = $month->copy()->endOfMonth()->toDateString();
 
-        // Pass all active metrics so Vue can generate dynamic columns
-        $metrics = Metric::all();
+        // Get non-admin & non-supervisor employees with their roles
+        $users = User::with('roles')
+            ->whereHas('roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']))
+            ->get();
 
-        $users = User::whereHas('roles', fn($q) => $q->where('name', '!=', 'admin'))->get();
+        // Get all metrics with assigned roles
+        $metrics = Metric::with('roles')->get();
 
         // Get performance score aggregates for the selected period type
         $scores = PerformanceScore::where('period_type', $period)
             ->whereBetween('period_start', [$monthStart, $monthEnd])
             ->get();
 
+        // Get approved slips totals for raw values
+        $slipsSummary = Slip::whereBetween('date', [$monthStart, $monthEnd])
+            ->where('status', 'approved')
+            ->select('user_id', 'metric_id', \Illuminate\Support\Facades\DB::raw('SUM(value) as total_value'), \Illuminate\Support\Facades\DB::raw('SUM(daily_points_earned) as total_daily_points'))
+            ->groupBy('user_id', 'metric_id')
+            ->get()
+            ->groupBy('user_id');
+
+        // Group users by their primary role
+        $roleGroups = [];
+        foreach ($users as $user) {
+            $roleName = $user->roles->first()?->name ?? 'General Staff';
+            $roleId   = $user->roles->first()?->id;
+
+            if (!isset($roleGroups[$roleName])) {
+                // Find metrics applicable to this role
+                $applicableMetrics = $metrics->filter(function($m) use ($roleId) {
+                    if (!$roleId) return true;
+                    return $m->roles->isEmpty() || $m->roles->contains('id', $roleId);
+                })->values();
+
+                $roleGroups[$roleName] = [
+                    'role'    => $roleName,
+                    'metrics' => $applicableMetrics,
+                    'members' => [],
+                ];
+            }
+
+            // Build employee metric matrix
+            $userSlips = $slipsSummary->get($user->id, collect());
+            $userScores = $scores->where('user_id', $user->id);
+            $totalMark = 0;
+
+            $metricData = [];
+            foreach ($roleGroups[$roleName]['metrics'] as $metric) {
+                $scoreRecord = $userScores->firstWhere('metric_id', $metric->id);
+                $slipRecord  = $userSlips->firstWhere('metric_id', $metric->id);
+
+                $rawValue = $slipRecord ? floatval($slipRecord->total_value) : 0;
+                $points = $scoreRecord ? floatval($scoreRecord->period_points_earned) : ($slipRecord ? floatval($slipRecord->total_daily_points) : 0);
+                $light  = $scoreRecord ? $scoreRecord->traffic_light : ($rawValue > 0 ? 'green' : 'grey');
+
+                $totalMark += $points;
+
+                $metricData[$metric->id] = [
+                    'rawValue'       => $rawValue,
+                    'formattedValue' => $this->formatValue($rawValue, $metric),
+                    'points'         => $points,
+                    'light'          => $light, // green, yellow, red, grey
+                ];
+            }
+
+            $roleGroups[$roleName]['members'][] = [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'metricData' => $metricData,
+                'totalMark'  => round($totalMark, 2),
+            ];
+        }
+
         return Inertia::render('Reports/Team', [
-            'employees' => $users,
-            'metrics'   => $metrics,
-            'scores'    => $scores,
-            'month'     => $month->format('Y-m'),
-            'period'    => $period,
+            'roleGroups' => array_values($roleGroups),
+            'month'      => $month->format('Y-m'),
+            'period'     => $period,
+        ]);
+    }
+
+    /**
+     * Greenscore Leaderboard / Hall of Fame Report
+     */
+    public function greenscore(Request $request)
+    {
+        $month = $request->month ? Carbon::parse($request->month) : Carbon::today();
+        $monthStart = $month->copy()->startOfMonth()->toDateString();
+        $monthEnd   = $month->copy()->endOfMonth()->toDateString();
+
+        $metrics = Metric::all();
+        $leaderboard = [];
+        $sno = 1;
+
+        foreach ($metrics as $metric) {
+            // Find top performer for this metric in the month (excluding admin and supervisor)
+            $topSlip = Slip::with('user')
+                ->whereHas('user.roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']))
+                ->where('metric_id', $metric->id)
+                ->whereBetween('date', [$monthStart, $monthEnd])
+                ->where('status', 'approved')
+                ->select('user_id', \Illuminate\Support\Facades\DB::raw('SUM(value) as total_value'))
+                ->groupBy('user_id')
+                ->orderByDesc('total_value')
+                ->first();
+
+            if ($topSlip && $topSlip->user && $topSlip->total_value > 0) {
+                $resultLabel = 'Highest ' . ($metric->label ?? $metric->name);
+                
+                // Map common label aliases to match image
+                $nameLower = strtolower($metric->label ?? $metric->name);
+                if (str_contains($nameLower, 'sale')) $resultLabel = 'Highest Sales';
+                elseif (str_contains($nameLower, 'collection')) $resultLabel = 'Highest Collections';
+                elseif (str_contains($nameLower, 'colour') || str_contains($nameLower, 'color')) $resultLabel = 'Highest Colour Matching';
+                elseif (str_contains($nameLower, 'customer')) $resultLabel = 'Highest Customer Handling';
+
+                $leaderboard[] = [
+                    'sno'       => $sno++,
+                    'name'      => strtoupper($topSlip->user->name),
+                    'raw_data'  => floatval($topSlip->total_value),
+                    'data'      => $this->formatValue(floatval($topSlip->total_value), $metric),
+                    'results'   => $resultLabel,
+                ];
+            }
+        }
+
+        // Add Top Attendance Achiever (excluding admin and supervisor)
+        $topAttendance = Attendance::with('user')
+            ->whereHas('user.roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']))
+            ->whereBetween('date', [$monthStart, $monthEnd])
+            ->where('status', 'present')
+            ->select('user_id', \Illuminate\Support\Facades\DB::raw('COUNT(*) as total_days'))
+            ->groupBy('user_id')
+            ->orderByDesc('total_days')
+            ->first();
+
+        if ($topAttendance && $topAttendance->user && $topAttendance->total_days > 0) {
+            $leaderboard[] = [
+                'sno'      => $sno++,
+                'name'     => strtoupper($topAttendance->user->name),
+                'raw_data' => $topAttendance->total_days,
+                'data'     => $topAttendance->total_days . ' Days',
+                'results'  => 'Highest On Attendance',
+            ];
+        }
+
+        return Inertia::render('Reports/Greenscore', [
+            'leaderboard' => $leaderboard,
+            'month'       => $month->format('Y-m'),
+            'monthName'   => strtoupper($month->format('F Y')),
         ]);
     }
 
