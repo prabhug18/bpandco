@@ -7,10 +7,18 @@ use App\Models\Metric;
 use App\Models\Slip;
 use App\Models\Attendance;
 use App\Models\PerformanceScore;
+use App\Models\PeriodTarget;
 use App\Models\SummaryReport;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Color;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class ReportController extends Controller
 {
@@ -272,6 +280,529 @@ class ReportController extends Controller
             'leaderboard' => $leaderboard,
             'month'       => $month->format('Y-m'),
             'monthName'   => strtoupper($month->format('F Y')),
+        ]);
+    }
+
+    /**
+     * Employee Attendance Performance Report (Month-wise & Year-wise)
+     */
+    public function attendance(Request $request)
+    {
+        $mode = $request->view_mode ?? 'month'; // 'month' or 'year'
+        $selectedRole = $request->role_id ?? null;
+
+        $monthStr = $request->month ? Carbon::parse($request->month)->format('Y-m') : Carbon::today()->format('Y-m');
+        $yearStr  = $request->year ?? Carbon::parse($monthStr)->format('Y');
+
+        // Query non-admin employees (or filter by role / user)
+        $userQuery = User::with('roles')
+            ->whereHas('roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']));
+
+        if ($request->user_id) {
+            $userQuery->where('id', $request->user_id);
+        }
+
+        if ($selectedRole) {
+            $userQuery->whereHas('roles', fn($q) => $q->where('roles.id', $selectedRole));
+        }
+
+        $employees = $userQuery->orderBy('name')->get();
+
+        $allRoles = \Spatie\Permission\Models\Role::whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor'])->get();
+        $allEmployeesList = User::whereHas('roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']))
+            ->select('id', 'name')
+            ->orderBy('name')
+            ->get();
+
+        $attendanceMetric = Metric::where('key', 'attendance')->first();
+        $lateMetric       = Metric::where('key', 'late')->first();
+        $attMetricId  = $attendanceMetric?->id ?? 5;
+        $lateMetricId = $lateMetric?->id ?? 7;
+
+        if ($mode === 'month') {
+            $monthCarbon = Carbon::parse($monthStr . '-01');
+            $startOfMonth = $monthCarbon->copy()->startOfMonth()->toDateString();
+            $endOfMonth   = $monthCarbon->copy()->endOfMonth()->toDateString();
+            $daysInMonth  = $monthCarbon->daysInMonth;
+
+            // Fetch attendance records for the month
+            $records = Attendance::whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            // Pre-fetch PerformanceScore and Slips for the month
+            $scoresMap = PerformanceScore::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->whereBetween('period_start', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            $slipsMap = Slip::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->where('status', 'approved')
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            $monthData = [];
+            foreach ($employees as $emp) {
+                $userRecords = $records->get($emp->id, collect())->keyBy('date');
+                $userRoleId  = $emp->roles->first()?->id;
+                
+                $dailyGrid = [];
+                $presentCount = 0;
+                $lateCount = 0;
+                $halfDayCount = 0;
+                $absentCount = 0;
+                $holidayCount = 0;
+
+                for ($d = 1; $d <= $daysInMonth; $d++) {
+                    $dayDate = $monthCarbon->copy()->day($d)->toDateString();
+                    $rec = $userRecords->get($dayDate);
+
+                    $statusCode = '-'; // empty / pending
+                    if ($rec) {
+                        $st = strtolower($rec->status);
+                        if ($st === 'present') { $statusCode = 'P'; $presentCount++; }
+                        elseif ($st === 'late') { $statusCode = 'L'; $lateCount++; }
+                        elseif ($st === 'half_day') { $statusCode = 'HD'; $halfDayCount++; }
+                        elseif ($st === 'absent') { $statusCode = 'A'; $absentCount++; }
+                        elseif ($st === 'holiday') { $statusCode = 'H'; $holidayCount++; }
+                        else { $statusCode = 'P'; $presentCount++; }
+                    }
+
+                    $dailyGrid[$d] = [
+                        'date'   => $dayDate,
+                        'status' => $statusCode,
+                        'points' => $rec ? floatval($rec->daily_points_earned) : 0,
+                    ];
+                }
+
+                // Points calculation logic
+                $totalPoints = 0;
+                $empScores = $scoresMap->get($emp->id, collect());
+                $scorePts  = $empScores->sum('period_points_earned');
+
+                if ($scorePts > 0) {
+                    $totalPoints = $scorePts;
+                } else {
+                    $empSlips = $slipsMap->get($emp->id, collect());
+                    $slipPts  = $empSlips->sum('daily_points_earned');
+
+                    if ($slipPts > 0) {
+                        $totalPoints = $slipPts;
+                    } elseif ($presentCount > 0) {
+                        // Calculate via PeriodTarget matching presentCount
+                        $target = PeriodTarget::where('metric_id', $attMetricId)
+                            ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                            ->where('min_value', '<=', $presentCount)
+                            ->orderBy('min_value', 'desc')
+                            ->first();
+
+                        if ($target) {
+                            $totalPoints = floatval($target->points_awarded);
+                        } else {
+                            if ($presentCount >= 25) $totalPoints = 10;
+                            elseif ($presentCount >= 20) $totalPoints = 7;
+                            elseif ($presentCount >= 15) $totalPoints = 5;
+                        }
+                    }
+                }
+
+                $monthData[] = [
+                    'id'           => $emp->id,
+                    'name'         => $emp->name,
+                    'role'         => $emp->roles->first()?->name ?? 'Staff',
+                    'dailyGrid'    => $dailyGrid,
+                    'presentCount' => $presentCount,
+                    'lateCount'    => $lateCount,
+                    'halfDayCount' => $halfDayCount,
+                    'absentCount'  => $absentCount,
+                    'holidayCount' => $holidayCount,
+                    'totalPoints'  => round($totalPoints, 2),
+                ];
+            }
+
+            return Inertia::render('Reports/Attendance', [
+                'viewMode'         => 'month',
+                'month'            => $monthStr,
+                'year'             => $yearStr,
+                'daysInMonth'      => $daysInMonth,
+                'reportData'       => $monthData,
+                'allRoles'         => $allRoles,
+                'allEmployeesList' => $allEmployeesList,
+                'selectedUserId'   => $request->user_id,
+                'selectedRoleId'   => $selectedRole,
+            ]);
+
+        } else {
+            // Year-wise mode
+            $startOfYear = $yearStr . '-01-01';
+            $endOfYear   = $yearStr . '-12-31';
+
+            $records = Attendance::whereBetween('date', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            $scoresMap = PerformanceScore::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->whereBetween('period_start', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            $slipsMap = Slip::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->where('status', 'approved')
+                ->whereBetween('date', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            $yearData = [];
+            foreach ($employees as $emp) {
+                $userRecords = $records->get($emp->id, collect());
+                $userRoleId  = $emp->roles->first()?->id;
+                
+                $monthlyGrid = [];
+                $yearlyTotalPresent = 0;
+                $yearlyTotalLate    = 0;
+                $yearlyTotalPoints  = 0;
+
+                for ($m = 1; $m <= 12; $m++) {
+                    $mStr = sprintf('%02d', $m);
+                    $monthCarbon = Carbon::parse("{$yearStr}-{$mStr}-01");
+                    $mStart = $monthCarbon->copy()->startOfMonth()->toDateString();
+                    $mEnd   = $monthCarbon->copy()->endOfMonth()->toDateString();
+
+                    $mRecords = $userRecords->filter(fn($r) => $r->date >= $mStart && $r->date <= $mEnd);
+                    $mPresent = $mRecords->filter(fn($r) => in_array(strtolower($r->status), ['present', 'late', 'half_day']))->count();
+                    $mLate    = $mRecords->filter(fn($r) => strtolower($r->status) === 'late')->count();
+                    
+                    // Monthly points calculation
+                    $mScores = $scoresMap->get($emp->id, collect())->filter(fn($s) => $s->period_start >= $mStart && $s->period_start <= $mEnd);
+                    $mPoints = $mScores->sum('period_points_earned');
+
+                    if ($mPoints <= 0) {
+                        $mSlips = $slipsMap->get($emp->id, collect())->filter(fn($sl) => $sl->date >= $mStart && $sl->date <= $mEnd);
+                        $mPtsFromSlips = $mSlips->sum('daily_points_earned');
+
+                        if ($mPtsFromSlips > 0) {
+                            $mPoints = $mPtsFromSlips;
+                        } elseif ($mPresent > 0) {
+                            $target = PeriodTarget::where('metric_id', $attMetricId)
+                                ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                                ->where('min_value', '<=', $mPresent)
+                                ->orderBy('min_value', 'desc')
+                                ->first();
+
+                            if ($target) {
+                                $mPoints = floatval($target->points_awarded);
+                            } else {
+                                if ($mPresent >= 25) $mPoints = 10;
+                                elseif ($mPresent >= 20) $mPoints = 7;
+                                elseif ($mPresent >= 15) $mPoints = 5;
+                            }
+                        }
+                    }
+
+                    $yearlyTotalPresent += $mPresent;
+                    $yearlyTotalLate    += $mLate;
+                    $yearlyTotalPoints  += $mPoints;
+
+                    $monthlyGrid[$m] = [
+                        'monthName'    => $monthCarbon->format('M'),
+                        'presentCount' => $mPresent,
+                        'lateCount'    => $mLate,
+                        'totalDays'    => $monthCarbon->daysInMonth,
+                        'points'       => round($mPoints, 2),
+                    ];
+                }
+
+                $yearData[] = [
+                    'id'                 => $emp->id,
+                    'name'               => $emp->name,
+                    'role'               => $emp->roles->first()?->name ?? 'Staff',
+                    'monthlyGrid'        => $monthlyGrid,
+                    'yearlyTotalPresent' => $yearlyTotalPresent,
+                    'yearlyTotalLate'    => $yearlyTotalLate,
+                    'yearlyTotalPoints'  => round($yearlyTotalPoints, 2),
+                ];
+            }
+
+            return Inertia::render('Reports/Attendance', [
+                'viewMode'         => 'year',
+                'month'            => $monthStr,
+                'year'             => $yearStr,
+                'reportData'       => $yearData,
+                'allRoles'         => $allRoles,
+                'allEmployeesList' => $allEmployeesList,
+                'selectedUserId'   => $request->user_id,
+                'selectedRoleId'   => $selectedRole,
+            ]);
+        }
+    }
+
+    /**
+     * Export Employee Attendance Performance Report to Excel (.xlsx)
+     */
+    public function exportAttendanceExcel(Request $request)
+    {
+        $mode = $request->view_mode ?? 'month'; // 'month' or 'year'
+        $selectedRole = $request->role_id ?? null;
+
+        $monthStr = $request->month ? Carbon::parse($request->month)->format('Y-m') : Carbon::today()->format('Y-m');
+        $yearStr  = $request->year ?? Carbon::parse($monthStr)->format('Y');
+
+        $userQuery = User::with('roles')
+            ->whereHas('roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']));
+
+        if ($request->user_id) {
+            $userQuery->where('id', $request->user_id);
+        }
+
+        if ($selectedRole) {
+            $userQuery->whereHas('roles', fn($q) => $q->where('roles.id', $selectedRole));
+        }
+
+        $employees = $userQuery->orderBy('name')->get();
+        $attMetric = Metric::where('key', 'attendance')->first();
+        $lateMetric = Metric::where('key', 'late')->first();
+        $attMetricId  = $attMetric?->id ?? 5;
+        $lateMetricId = $lateMetric?->id ?? 7;
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Attendance Report');
+
+        if ($mode === 'month') {
+            $monthCarbon = Carbon::parse($monthStr . '-01');
+            $startOfMonth = $monthCarbon->copy()->startOfMonth()->toDateString();
+            $endOfMonth   = $monthCarbon->copy()->endOfMonth()->toDateString();
+            $daysInMonth  = $monthCarbon->daysInMonth;
+
+            $records = Attendance::whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            $scoresMap = PerformanceScore::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->whereBetween('period_start', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            $slipsMap = Slip::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->where('status', 'approved')
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->get()
+                ->groupBy('user_id');
+
+            // Header Title
+            $lastColLetter = Coordinate::stringFromColumnIndex($daysInMonth + 7);
+            $sheet->mergeCells("A1:{$lastColLetter}1");
+            $sheet->setCellValue('A1', 'B.P.&CO - EMPLOYEE ATTENDANCE PERFORMANCE REPORT - ' . strtoupper($monthCarbon->format('F Y')));
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color('FF003287'));
+            $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Table Headers
+            $colIndex = 1;
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'STAFF NAME');
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'ROLE');
+
+            for ($d = 1; $d <= $daysInMonth; $d++) {
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', $d);
+            }
+
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'P');
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'L');
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'HD');
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'A');
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex++) . '3', 'POINTS');
+
+            // Style Header Row (Row 3)
+            $sheet->getStyle("A3:{$lastColLetter}3")->getFont()->setBold(true)->setColor(new Color('FFFFFFFF'));
+            $sheet->getStyle("A3:{$lastColLetter}3")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF003287');
+            $sheet->getStyle("A3:{$lastColLetter}3")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            $rowIndex = 4;
+            foreach ($employees as $emp) {
+                $userRecords = $records->get($emp->id, collect())->keyBy('date');
+                $userRoleId  = $emp->roles->first()?->id;
+
+                $presentCount = 0; $lateCount = 0; $halfDayCount = 0; $absentCount = 0;
+
+                $c = 1;
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, strtoupper($emp->name));
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $emp->roles->first()?->name ?? 'Staff');
+
+                for ($d = 1; $d <= $daysInMonth; $d++) {
+                    $dayDate = $monthCarbon->copy()->day($d)->toDateString();
+                    $rec = $userRecords->get($dayDate);
+
+                    $statusCode = '-';
+                    if ($rec) {
+                        $st = strtolower($rec->status);
+                        if ($st === 'present') { $statusCode = 'P'; $presentCount++; }
+                        elseif ($st === 'late') { $statusCode = 'L'; $lateCount++; }
+                        elseif ($st === 'half_day') { $statusCode = 'HD'; $halfDayCount++; }
+                        elseif ($st === 'absent') { $statusCode = 'A'; $absentCount++; }
+                        elseif ($st === 'holiday') { $statusCode = 'H'; }
+                        else { $statusCode = 'P'; $presentCount++; }
+                    }
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $statusCode);
+                }
+
+                // Points calculation
+                $totalPoints = 0;
+                $empScores = $scoresMap->get($emp->id, collect());
+                $scorePts  = $empScores->sum('period_points_earned');
+
+                if ($scorePts > 0) {
+                    $totalPoints = $scorePts;
+                } else {
+                    $empSlips = $slipsMap->get($emp->id, collect());
+                    $slipPts  = $empSlips->sum('daily_points_earned');
+                    if ($slipPts > 0) {
+                        $totalPoints = $slipPts;
+                    } elseif ($presentCount > 0) {
+                        $target = PeriodTarget::where('metric_id', $attMetricId)
+                            ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                            ->where('min_value', '<=', $presentCount)
+                            ->orderBy('min_value', 'desc')
+                            ->first();
+
+                        if ($target) {
+                            $totalPoints = floatval($target->points_awarded);
+                        } else {
+                            if ($presentCount >= 25) $totalPoints = 10;
+                            elseif ($presentCount >= 20) $totalPoints = 7;
+                            elseif ($presentCount >= 15) $totalPoints = 5;
+                        }
+                    }
+                }
+
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $presentCount);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $lateCount);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $halfDayCount);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $absentCount);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, round($totalPoints, 2));
+
+                $sheet->getStyle("A{$rowIndex}:{$lastColLetter}{$rowIndex}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("A{$rowIndex}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+                $rowIndex++;
+            }
+
+            $fileName = 'Attendance_Report_' . $monthStr . '.xlsx';
+
+        } else {
+            // Year-wise mode
+            $startOfYear = $yearStr . '-01-01';
+            $endOfYear   = $yearStr . '-12-31';
+
+            $records = Attendance::whereBetween('date', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            $scoresMap = PerformanceScore::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->whereBetween('period_start', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            $slipsMap = Slip::whereIn('metric_id', [$attMetricId, $lateMetricId])
+                ->where('status', 'approved')
+                ->whereBetween('date', [$startOfYear, $endOfYear])
+                ->get()
+                ->groupBy('user_id');
+
+            // Header Title
+            $sheet->mergeCells("A1:Q1");
+            $sheet->setCellValue('A1', 'B.P.&CO - EMPLOYEE ATTENDANCE PERFORMANCE REPORT - YEAR ' . $yearStr);
+            $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color('FF003287'));
+            $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            // Table Headers
+            $colHeaders = ['STAFF NAME', 'ROLE', 'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC', 'TOTAL PRESENT', 'TOTAL LATE', 'ANNUAL SCORE'];
+            foreach ($colHeaders as $idx => $hdr) {
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($idx + 1) . '3', $hdr);
+            }
+
+            $sheet->getStyle("A3:Q3")->getFont()->setBold(true)->setColor(new Color('FFFFFFFF'));
+            $sheet->getStyle("A3:Q3")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF003287');
+            $sheet->getStyle("A3:Q3")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+            $rowIndex = 4;
+            foreach ($employees as $emp) {
+                $userRecords = $records->get($emp->id, collect());
+                $userRoleId  = $emp->roles->first()?->id;
+
+                $c = 1;
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, strtoupper($emp->name));
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $emp->roles->first()?->name ?? 'Staff');
+
+                $yearlyTotalPresent = 0; $yearlyTotalLate = 0; $yearlyTotalPoints = 0;
+
+                for ($m = 1; $m <= 12; $m++) {
+                    $mStr = sprintf('%02d', $m);
+                    $monthCarbon = Carbon::parse("{$yearStr}-{$mStr}-01");
+                    $mStart = $monthCarbon->copy()->startOfMonth()->toDateString();
+                    $mEnd   = $monthCarbon->copy()->endOfMonth()->toDateString();
+
+                    $mRecords = $userRecords->filter(fn($r) => $r->date >= $mStart && $r->date <= $mEnd);
+                    $mPresent = $mRecords->filter(fn($r) => in_array(strtolower($r->status), ['present', 'late', 'half_day']))->count();
+                    $mLate    = $mRecords->filter(fn($r) => strtolower($r->status) === 'late')->count();
+
+                    $mScores = $scoresMap->get($emp->id, collect())->filter(fn($s) => $s->period_start >= $mStart && $s->period_start <= $mEnd);
+                    $mPoints = $mScores->sum('period_points_earned');
+
+                    if ($mPoints <= 0) {
+                        $mSlips = $slipsMap->get($emp->id, collect())->filter(fn($sl) => $sl->date >= $mStart && $sl->date <= $mEnd);
+                        $mPtsFromSlips = $mSlips->sum('daily_points_earned');
+
+                        if ($mPtsFromSlips > 0) {
+                            $mPoints = $mPtsFromSlips;
+                        } elseif ($mPresent > 0) {
+                            $target = PeriodTarget::where('metric_id', $attMetricId)
+                                ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                                ->where('min_value', '<=', $mPresent)
+                                ->orderBy('min_value', 'desc')
+                                ->first();
+
+                            if ($target) {
+                                $mPoints = floatval($target->points_awarded);
+                            } else {
+                                if ($mPresent >= 25) $mPoints = 10;
+                                elseif ($mPresent >= 20) $mPoints = 7;
+                                elseif ($mPresent >= 15) $mPoints = 5;
+                            }
+                        }
+                    }
+
+                    $yearlyTotalPresent += $mPresent;
+                    $yearlyTotalLate    += $mLate;
+                    $yearlyTotalPoints  += $mPoints;
+
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, "{$mPresent}/{$monthCarbon->daysInMonth}");
+                }
+
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $yearlyTotalPresent);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, $yearlyTotalLate);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c++) . $rowIndex, round($yearlyTotalPoints, 2));
+
+                $sheet->getStyle("A{$rowIndex}:Q{$rowIndex}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getStyle("A{$rowIndex}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+
+                $rowIndex++;
+            }
+
+            $fileName = 'Attendance_Report_Year_' . $yearStr . '.xlsx';
+        }
+
+        // Auto-size columns
+        foreach ($sheet->getColumnIterator() as $col) {
+            $sheet->getColumnDimension($col->getColumnIndex())->setAutoSize(true);
+        }
+
+        // Stream output
+        $writer = new Xlsx($spreadsheet);
+        return response()->streamDownload(function() use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
         ]);
     }
 

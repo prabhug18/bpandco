@@ -326,7 +326,7 @@ const trafficLightSummary = computed(() => {
     
     if (grandTotal > 0) {
         let finalColor = 'grey';
-        if (grandTotal > 70) finalColor = 'green';
+        if (grandTotal >= 70) finalColor = 'green';
         else if (grandTotal >= 50) finalColor = 'yellow';
         else if (grandTotal >= 30) finalColor = 'red';
         
@@ -495,7 +495,7 @@ const showGrowthPlan = () => {
                         </tr>
                         <tr>
                             <th style="background-color: #6c757d; color: white; width: 25%; font-size: 1rem;" class="py-3 align-middle">Traffic Light<br>Parameters</th>
-                            <th style="background-color: #198754; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Green<br><small>( >70 )</small></th>
+                            <th style="background-color: #198754; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Green<br><small>( >= 70 )</small></th>
                             <th style="background-color: #ffc107; color: black; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Yellow<br><small>(<70 & >= 50)</small></th>
                             <th style="background-color: #dc3545; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Red<br><small>(<50 & >= 30)</small></th>
                             <th style="background-color: #6c757d; color: white; width: 18.75%; font-size: 1rem;" class="py-3 align-middle">Grey<br><small>(<30)</small></th>

@@ -58,6 +58,8 @@ Route::middleware('auth')->group(function () {
         // Admin & Supervisor Only Reports
         Route::get('reports/team', [ReportController::class, 'team'])->name('reports.team');
         Route::get('reports/greenscore', [ReportController::class, 'greenscore'])->name('reports.greenscore');
+        Route::get('reports/attendance', [ReportController::class, 'attendance'])->name('reports.attendance');
+        Route::get('reports/attendance/export', [ReportController::class, 'exportAttendanceExcel'])->name('reports.attendance.export');
     });
 
     // Phase 6: Reports
