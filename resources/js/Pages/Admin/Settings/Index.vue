@@ -6,8 +6,42 @@ import Alert from '@/Utils/Alert';
 const props = defineProps({
     settings: Object,
     roles: Array,
-    selected_role_id: [Number, String]
+    selected_role_id: [Number, String],
+    api_tokens: Array,
+    new_token: String,
 });
+
+const tokenForm = useForm({
+    name: '',
+    store_code: '',
+});
+
+const createApiToken = () => {
+    if (!tokenForm.name) {
+        Alert.error('Validation Error', 'Please enter an Integration / Token Name');
+        return;
+    }
+
+    tokenForm.post(route('admin.settings.api-tokens.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            tokenForm.reset();
+            Alert.toast('API Token generated successfully!', 'success');
+        },
+        onError: (err) => {
+            Alert.error('Error', Object.values(err)[0] || 'Failed to generate token');
+        }
+    });
+};
+
+const revokeToken = (token) => {
+    if (confirm(`Are you sure you want to revoke API Token '${token.name}'?`)) {
+        useForm({}).delete(route('admin.settings.api-tokens.revoke', token.id), {
+            preserveScroll: true,
+            onSuccess: () => Alert.toast('Token revoked successfully', 'info'),
+        });
+    }
+};
 
 const form = useForm({
     role_id: props.selected_role_id || '',
@@ -273,6 +307,92 @@ const submit = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Third-Party POS & Billing API Tokens Card -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="premium-card p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                            <div>
+                                <h5 class="fw-bold text-primary mb-0">
+                                    <i class="bi bi-key me-2"></i> POS & Billing Software API Integration Tokens
+                                </h5>
+                                <small class="text-muted">Manage Bearer tokens for external shop POS / billing software sync.</small>
+                            </div>
+                        </div>
+
+                        <!-- Generated Token Banner Alert -->
+                        <div v-if="new_token" class="alert alert-success border-0 shadow-sm p-3 mb-4 rounded-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="fw-bold text-uppercase"><i class="bi bi-exclamation-triangle-fill me-1"></i> API Token Generated! Copy It Now:</div>
+                                <button type="button" class="btn btn-sm btn-dark rounded-pill px-3 py-0" @click="navigator.clipboard.writeText(new_token); Alert.toast('Token copied to clipboard!', 'success');">
+                                    <i class="bi bi-clipboard me-1"></i> Copy
+                                </button>
+                            </div>
+                            <div class="bg-white p-2 rounded border font-monospace text-dark user-select-all fw-bold fs-6">
+                                {{ new_token }}
+                            </div>
+                            <small class="text-muted mt-1 d-block">This plain-text token will not be displayed again for security reasons.</small>
+                        </div>
+
+                        <!-- Generate Token Form -->
+                        <form @submit.prevent="createApiToken" class="row g-3 align-items-end mb-4 bg-light p-3 rounded-3 border">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-bold text-muted text-uppercase mb-1">Token Name / Integration Name</label>
+                                <input type="text" class="form-control form-control-sm" v-model="tokenForm.name" placeholder="e.g. Main Shop POS System" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted text-uppercase mb-1">Store / Branch Code (Optional)</label>
+                                <input type="text" class="form-control form-control-sm" v-model="tokenForm.store_code" placeholder="e.g. STORE_001">
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-sm btn-primary rounded-pill w-100 fw-bold shadow-sm" :disabled="tokenForm.processing">
+                                    <i class="bi bi-plus-lg me-1"></i> Generate API Token
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Existing Tokens List -->
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light small text-uppercase fw-bold text-muted">
+                                    <tr>
+                                        <th>Integration Name</th>
+                                        <th>Store Code</th>
+                                        <th>Created By</th>
+                                        <th>Last Used</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="t in api_tokens" :key="t.id">
+                                        <td class="fw-bold text-dark">{{ t.name }}</td>
+                                        <td><code>{{ t.store_code || '-' }}</code></td>
+                                        <td class="small text-muted">{{ t.creator?.name || 'Admin' }}</td>
+                                        <td class="small text-muted">{{ t.last_used_at ? new Date(t.last_used_at).toLocaleString() : 'Never' }}</td>
+                                        <td>
+                                            <span class="badge rounded-pill" :class="t.is_active ? 'bg-success' : 'bg-danger'">
+                                                {{ t.is_active ? 'Active' : 'Revoked' }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            <button v-if="t.is_active" class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1" @click="revokeToken(t)">
+                                                Revoke
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!api_tokens || api_tokens.length === 0">
+                                        <td colspan="6" class="text-center py-4 text-muted small">
+                                            No POS / Billing integration tokens created yet.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

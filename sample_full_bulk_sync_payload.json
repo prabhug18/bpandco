@@ -1,0 +1,369 @@
+{
+    "sync_date": "2026-08-30",
+    "store_code": "MAIN_STORE_001",
+    "auto_approve": true,
+    "data": [
+        {
+            "user_identifier": "EMP3",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1001",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 57022
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 26065
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 35
+                },
+                {
+                    "metric_code": "COLOUR_MATCHING",
+                    "value": 3
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 23
+                },
+                {
+                    "metric_code": "BPLAC_PRODUCTS",
+                    "value": 12969
+                },
+                {
+                    "metric_code": "PANEL_COLLECTION",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP4",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1002",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 47725
+                },
+                {
+                    "metric_code": "OLD_STOCK_ENAMEL",
+                    "value": 16
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 44
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 20
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP5",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1003",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 42105
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 49967
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 45
+                },
+                {
+                    "metric_code": "COLOUR_MATCHING",
+                    "value": 4
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 26
+                },
+                {
+                    "metric_code": "BPLAC_PRODUCTS",
+                    "value": 8972
+                },
+                {
+                    "metric_code": "PANEL_COLLECTION",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP6",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1004",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 56953
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 52912
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 52
+                },
+                {
+                    "metric_code": "COLOUR_MATCHING",
+                    "value": 8
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 29
+                },
+                {
+                    "metric_code": "BPLAC_PRODUCTS",
+                    "value": 10422
+                },
+                {
+                    "metric_code": "PANEL_COLLECTION",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP7",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1005",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 72312
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 43861
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 53
+                },
+                {
+                    "metric_code": "COLOUR_MATCHING",
+                    "value": 3
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 13
+                },
+                {
+                    "metric_code": "BPLAC_PRODUCTS",
+                    "value": 6414
+                },
+                {
+                    "metric_code": "PANEL_COLLECTION",
+                    "value": 6
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP8",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1006",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 50979
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 29974
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 32
+                },
+                {
+                    "metric_code": "COLOUR_MATCHING",
+                    "value": 6
+                },
+                {
+                    "metric_code": "CUSTOMER_HANDLING",
+                    "value": 24
+                },
+                {
+                    "metric_code": "BPLAC_PRODUCTS",
+                    "value": 17498
+                },
+                {
+                    "metric_code": "PANEL_COLLECTION",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP9",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1007",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 142098
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 117136
+                },
+                {
+                    "metric_code": "DIRECT_COLLECTION",
+                    "value": 26038
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 32
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP10",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1008",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 144498
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 77124
+                },
+                {
+                    "metric_code": "DIRECT_COLLECTION",
+                    "value": 33686
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 25
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP11",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1009",
+            "metrics": [
+                {
+                    "metric_code": "TOTAL_SALES_INR",
+                    "value": 106461
+                },
+                {
+                    "metric_code": "COLLECTION",
+                    "value": 98188
+                },
+                {
+                    "metric_code": "DIRECT_COLLECTION",
+                    "value": 37329
+                },
+                {
+                    "metric_code": "BILLS_COUNT",
+                    "value": 29
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP12",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1010",
+            "metrics": [
+                {
+                    "metric_code": "PRODUCTION",
+                    "value": 42
+                },
+                {
+                    "metric_code": "STOCK_CHECKING",
+                    "value": 6
+                },
+                {
+                    "metric_code": "OLD_STOCK_PU",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP13",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1011",
+            "metrics": [
+                {
+                    "metric_code": "PRODUCTION",
+                    "value": 29
+                },
+                {
+                    "metric_code": "STOCK_CHECKING",
+                    "value": 7
+                },
+                {
+                    "metric_code": "OLD_STOCK_PU",
+                    "value": 8
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP14",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1012",
+            "metrics": [
+                {
+                    "metric_code": "PRODUCTION",
+                    "value": 42
+                },
+                {
+                    "metric_code": "STOCK_CHECKING",
+                    "value": 7
+                },
+                {
+                    "metric_code": "OLD_STOCK_PU",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP15",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1013",
+            "metrics": [
+                {
+                    "metric_code": "PRODUCTION",
+                    "value": 34
+                },
+                {
+                    "metric_code": "STOCK_CHECKING",
+                    "value": 12
+                },
+                {
+                    "metric_code": "OLD_STOCK_PU",
+                    "value": 8
+                }
+            ]
+        },
+        {
+            "user_identifier": "EMP16",
+            "date": "2026-08-30",
+            "reference_id": "POS-BATCH-20260830-1014",
+            "metrics": [
+                {
+                    "metric_code": "PRODUCTION",
+                    "value": 40
+                },
+                {
+                    "metric_code": "STOCK_CHECKING",
+                    "value": 7
+                },
+                {
+                    "metric_code": "OLD_STOCK_PU",
+                    "value": 2
+                }
+            ]
+        }
+    ]
+}

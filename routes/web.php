@@ -90,6 +90,8 @@ Route::middleware('auth')->group(function () {
 
         Route::get('settings', [SettingController::class, 'index'])->name('settings.index')->middleware('can:manage system settings');
         Route::post('settings', [SettingController::class, 'update'])->name('settings.update')->middleware('can:manage system settings');
+        Route::post('settings/api-tokens', [SettingController::class, 'storeApiToken'])->name('settings.api-tokens.store')->middleware('can:manage system settings');
+        Route::delete('settings/api-tokens/{token}', [SettingController::class, 'revokeApiToken'])->name('settings.api-tokens.revoke')->middleware('can:manage system settings');
         
         // Data Editor (Overrides)
         Route::get('edit-data', [\App\Http\Controllers\Admin\DataEditController::class, 'index'])->name('data.edit')->middleware('can:manage data');

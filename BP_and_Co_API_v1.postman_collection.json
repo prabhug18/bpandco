@@ -1,0 +1,243 @@
+{
+	"info": {
+		"_postman_id": "9b1c7820-21a4-4a8e-a2f1-63870e28f32e",
+		"name": "BP&Co POS & Billing Software API Integration v1",
+		"description": "Postman collection for testing BP&Co External REST API v1 endpoints (Bulk Sync, Sync Status, Approved Slips, Metrics, and Users).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string"
+		},
+		{
+			"key": "api_token",
+			"value": "YOUR_BEARER_API_TOKEN_HERE",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{api_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "1. Bulk Sync - Ingest Daily Performance Data",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"sync_date\": \"2026-08-10\",\n  \"store_code\": \"STORE_001\",\n  \"auto_approve\": true,\n  \"data\": [\n    {\n      \"user_identifier\": \"EMP101\",\n      \"date\": \"2026-08-10\",\n      \"reference_id\": \"POS-BATCH-8821\",\n      \"metrics\": [\n        {\n          \"metric_code\": \"TOTAL_SALES_INR\",\n          \"value\": 45000.50\n        },\n        {\n          \"metric_code\": \"BILLS_COUNT\",\n          \"value\": 38\n        },\n        {\n          \"metric_code\": \"ITEMS_SOLD\",\n          \"value\": 112\n        }\n      ]\n    }\n  ]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/bulk-sync",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"bulk-sync"
+					]
+				},
+				"description": "Submit bulk performance metric data for one or multiple employees in a single batch request."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Sync Status - Check Batch Status",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/sync-status/POS-BATCH-8821",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"sync-status",
+						"POS-BATCH-8821"
+					]
+				},
+				"description": "Check the processing status of a previously submitted reference_id."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Approved Slips - Single Date Query",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/slips/approved?user_identifier=EMP101&metric_code=TOTAL_SALES_INR&date=2026-08-10",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"slips",
+						"approved"
+					],
+					"query": [
+						{
+							"key": "user_identifier",
+							"value": "EMP101"
+						},
+						{
+							"key": "metric_code",
+							"value": "TOTAL_SALES_INR"
+						},
+						{
+							"key": "date",
+							"value": "2026-08-10"
+						}
+					]
+				},
+				"description": "Retrieve approved performance slips and earned points for a single date."
+			},
+			"response": []
+		},
+		{
+			"name": "3b. Approved Slips - Date Range Query",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/slips/approved?start_date=2026-08-01&end_date=2026-08-10&page=1&per_page=50",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"slips",
+						"approved"
+					],
+					"query": [
+						{
+							"key": "start_date",
+							"value": "2026-08-01"
+						},
+						{
+							"key": "end_date",
+							"value": "2026-08-10"
+						},
+						{
+							"key": "page",
+							"value": "1"
+						},
+						{
+							"key": "per_page",
+							"value": "50"
+						}
+					]
+				},
+				"description": "Retrieve paginated approved slips across a date range."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Active Metrics - Fetch Definitions",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/metrics",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"metrics"
+					]
+				},
+				"description": "Retrieve all active BP&Co performance metric definitions and mapping codes."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Active Employees - Fetch Mapping List",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/external/users",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"external",
+						"users"
+					]
+				},
+				"description": "Retrieve all active BP&Co employees for third-party mapping."
+			},
+			"response": []
+		}
+	]
+}
