@@ -979,6 +979,341 @@ class ReportController extends Controller
     }
 
     /**
+     * Monthly Points Summary Report for all employees
+     */
+    public function monthlySummary(Request $request)
+    {
+        $data = $this->getMonthlySummaryData($request);
+        return Inertia::render('Reports/MonthlySummary', $data);
+    }
+
+    /**
+     * Export Monthly Points Summary Report to Excel (.xlsx)
+     */
+    public function exportMonthlySummaryExcel(Request $request)
+    {
+        $data = $this->getMonthlySummaryData($request);
+        $employees = $data['employees'];
+        $months    = $data['months'];
+        $fy        = $data['financial_year'];
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Monthly Points Summary');
+
+        $totalCols = count($months) + 3; // S No, Name, Total + months
+        $lastColLetter = Coordinate::stringFromColumnIndex($totalCols);
+
+        // Title row
+        $sheet->mergeCells("A1:{$lastColLetter}1");
+        $sheet->setCellValue('A1', "B.P.&CO - MONTHLY POINTS SUMMARY REPORT (FY {$fy})");
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->setColor(new Color('FF003287'));
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Subtitle row
+        $sheet->mergeCells("A2:{$lastColLetter}2");
+        $sheet->setCellValue('A2', "Generated on: " . Carbon::now()->format('d M Y, h:i A') . " | Thresholds: Green ≥ 70, Yellow 50-69, Red < 50");
+        $sheet->getStyle('A2')->getFont()->setItalic(true)->setSize(10)->setColor(new Color('FF6C757D'));
+        $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // Header Row (Row 4)
+        $sheet->setCellValue('A4', 'S No');
+        $sheet->setCellValue('B4', 'Name');
+        $sheet->setCellValue('C4', 'Total');
+
+        $colIdx = 4;
+        foreach ($months as $m) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIdx);
+            $sheet->setCellValue($colLetter . '4', $m['name'] . "\n" . $m['year']);
+            $sheet->getStyle($colLetter . '4')->getAlignment()->setWrapText(true);
+            $colIdx++;
+        }
+
+        // Header styling
+        $sheet->getStyle("A4:{$lastColLetter}4")->getFont()->setBold(true)->setColor(new Color('FFFFFFFF'));
+        $sheet->getStyle("A4:{$lastColLetter}4")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF003287');
+        $sheet->getStyle("A4:{$lastColLetter}4")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+        $sheet->getRowDimension(4)->setRowHeight(32);
+
+        // Data Rows
+        $rowIndex = 5;
+        foreach ($employees as $emp) {
+            $sheet->setCellValue('A' . $rowIndex, $emp['s_no']);
+            $sheet->setCellValue('B' . $rowIndex, strtoupper($emp['name']));
+            $sheet->setCellValue('C' . $rowIndex, $emp['total']);
+
+            // Alignments
+            $sheet->getStyle('A' . $rowIndex)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $sheet->getStyle('B' . $rowIndex)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+            $sheet->getStyle('C' . $rowIndex)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->getFont()->setBold(true);
+
+            // Name & Total background matching client's format
+            $totalHex = match($emp['total_color']) {
+                'green'  => 'FF2E7D32',
+                'yellow' => 'FFF9A825',
+                'red'    => 'FFD32F2F',
+                default  => 'FFFFFFFF',
+            };
+            $textHex = ($emp['total_color'] === 'white') ? 'FF000000' : 'FFFFFFFF';
+
+            if ($emp['total_color'] !== 'white') {
+                $sheet->getStyle("B{$rowIndex}:C{$rowIndex}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($totalHex);
+                $sheet->getStyle("B{$rowIndex}:C{$rowIndex}")->getFont()->setColor(new Color($textHex));
+            }
+
+            // Month columns
+            $c = 4;
+            foreach ($months as $m) {
+                $mKey = $m['key'];
+                $mData = $emp['months'][$mKey] ?? ['points' => null, 'color' => 'white'];
+                $colLetter = Coordinate::stringFromColumnIndex($c);
+
+                if ($mData['points'] !== null) {
+                    $sheet->setCellValue($colLetter . $rowIndex, $mData['points']);
+                    $sheet->getStyle($colLetter . $rowIndex)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                    $cellHex = match($mData['color']) {
+                        'green'  => 'FF2E7D32',
+                        'yellow' => 'FFF9A825',
+                        'red'    => 'FFD32F2F',
+                        default  => 'FFFFFFFF',
+                    };
+                    $cellText = ($mData['color'] === 'white') ? 'FF000000' : 'FFFFFFFF';
+
+                    if ($mData['color'] !== 'white') {
+                        $sheet->getStyle($colLetter . $rowIndex)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($cellHex);
+                        $sheet->getStyle($colLetter . $rowIndex)->getFont()->setColor(new Color($cellText))->setBold(true);
+                    }
+                } else {
+                    $sheet->setCellValue($colLetter . $rowIndex, '');
+                }
+                $c++;
+            }
+
+            $rowIndex++;
+        }
+
+        // Borders
+        $lastRow = $rowIndex - 1;
+        if ($lastRow >= 4) {
+            $sheet->getStyle("A4:{$lastColLetter}{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFD3D3D3');
+        }
+
+        // Auto-size columns
+        foreach (range(1, $totalCols) as $cIdx) {
+            $colLetter = Coordinate::stringFromColumnIndex($cIdx);
+            $sheet->getColumnDimension($colLetter)->setAutoSize(true);
+        }
+
+        $fileName = 'Monthly_Points_Summary_' . str_replace('-', '_', $fy) . '.xlsx';
+        $writer = new Xlsx($spreadsheet);
+        return response()->streamDownload(function() use ($writer) {
+            $writer->save('php://output');
+        }, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    /**
+     * Data aggregation helper for Monthly Summary Report & Export
+     */
+    private function getMonthlySummaryData(Request $request): array
+    {
+        $now = Carbon::today();
+        $currentYear = $now->year;
+        $currentMonth = $now->month;
+        $currentMonthKey = $now->format('Y-m');
+
+        // Current Indian FY starts April 1:
+        $defaultStartYear = ($currentMonth >= 4) ? $currentYear : ($currentYear - 1);
+        $defaultFy = $defaultStartYear . '-' . ($defaultStartYear + 1);
+
+        $fy = $request->financial_year ?: $defaultFy;
+        $parts = explode('-', $fy);
+        $fyStartYear = intval($parts[0] ?? $defaultStartYear);
+        $fyEndYear   = intval($parts[1] ?? ($fyStartYear + 1));
+
+        $completedOnly = $request->has('completed_only') 
+            ? filter_var($request->completed_only, FILTER_VALIDATE_BOOLEAN) 
+            : true;
+
+        $allMonths = [
+            ['key' => sprintf('%04d-04', $fyStartYear), 'name' => 'Apr', 'year' => $fyStartYear, 'label' => "Apr {$fyStartYear}"],
+            ['key' => sprintf('%04d-05', $fyStartYear), 'name' => 'May', 'year' => $fyStartYear, 'label' => "May {$fyStartYear}"],
+            ['key' => sprintf('%04d-06', $fyStartYear), 'name' => 'Jun', 'year' => $fyStartYear, 'label' => "Jun {$fyStartYear}"],
+            ['key' => sprintf('%04d-07', $fyStartYear), 'name' => 'Jul', 'year' => $fyStartYear, 'label' => "Jul {$fyStartYear}"],
+            ['key' => sprintf('%04d-08', $fyStartYear), 'name' => 'Aug', 'year' => $fyStartYear, 'label' => "Aug {$fyStartYear}"],
+            ['key' => sprintf('%04d-09', $fyStartYear), 'name' => 'Sep', 'year' => $fyStartYear, 'label' => "Sep {$fyStartYear}"],
+            ['key' => sprintf('%04d-10', $fyStartYear), 'name' => 'Oct', 'year' => $fyStartYear, 'label' => "Oct {$fyStartYear}"],
+            ['key' => sprintf('%04d-11', $fyStartYear), 'name' => 'Nov', 'year' => $fyStartYear, 'label' => "Nov {$fyStartYear}"],
+            ['key' => sprintf('%04d-12', $fyStartYear), 'name' => 'Dec', 'year' => $fyStartYear, 'label' => "Dec {$fyStartYear}"],
+            ['key' => sprintf('%04d-01', $fyEndYear),   'name' => 'Jan', 'year' => $fyEndYear,   'label' => "Jan {$fyEndYear}"],
+            ['key' => sprintf('%04d-02', $fyEndYear),   'name' => 'Feb', 'year' => $fyEndYear,   'label' => "Feb {$fyEndYear}"],
+            ['key' => sprintf('%04d-03', $fyEndYear),   'name' => 'Mar', 'year' => $fyEndYear,   'label' => "Mar {$fyEndYear}"],
+        ];
+
+        $visibleMonths = [];
+        foreach ($allMonths as $m) {
+            if ($completedOnly) {
+                // If month is strictly in the past (before current month)
+                if ($m['key'] < $currentMonthKey) {
+                    $visibleMonths[] = $m;
+                }
+            } else {
+                // Include ongoing month and past months
+                if ($m['key'] <= $currentMonthKey) {
+                    $visibleMonths[] = $m;
+                }
+            }
+        }
+
+        // Fallback: If no completed months exist (e.g. in early April), show at least current month
+        if (empty($visibleMonths)) {
+            $visibleMonths = array_slice($allMonths, 0, 1);
+        }
+
+        // Available FY list for dropdown
+        $availableFys = [
+            ($defaultStartYear) . '-' . ($defaultStartYear + 1),
+            ($defaultStartYear - 1) . '-' . ($defaultStartYear),
+            ($defaultStartYear - 2) . '-' . ($defaultStartYear - 1),
+        ];
+
+        // Fetch non-admin employees
+        $userQuery = User::with('roles')
+            ->whereHas('roles', fn($q) => $q->whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor']));
+
+        if ($request->role_id) {
+            $userQuery->whereHas('roles', fn($q) => $q->where('roles.id', $request->role_id));
+        }
+
+        if ($request->search) {
+            $term = trim($request->search);
+            $userQuery->where('name', 'like', "%{$term}%");
+        }
+
+        $employees = $userQuery->orderBy('name')->get();
+
+        $firstMonthStart = Carbon::parse($visibleMonths[0]['key'] . '-01')->startOfMonth()->toDateString();
+        $lastMonthEnd    = Carbon::parse(end($visibleMonths)['key'] . '-01')->endOfMonth()->toDateString();
+
+        // Approved slips
+        $slips = Slip::where('status', 'approved')
+            ->whereBetween('date', [$firstMonthStart, $lastMonthEnd])
+            ->select('user_id', 'metric_id', 'date', 'daily_points_earned')
+            ->get();
+
+        // Performance scores (consolidated 30_days or monthly)
+        $scores = PerformanceScore::whereIn('period_type', ['30_days', 'monthly'])
+            ->whereBetween('period_start', [$firstMonthStart, $lastMonthEnd])
+            ->get();
+
+        $employeeRows = [];
+
+        foreach ($employees as $emp) {
+            $monthlyScores = [];
+            $validPoints = [];
+
+            foreach ($visibleMonths as $vm) {
+                $mKey = $vm['key'];
+                $mStart = $mKey . '-01';
+                $mEnd   = Carbon::parse($mStart)->endOfMonth()->toDateString();
+
+                $userScores = $scores->where('user_id', $emp->id)
+                    ->filter(fn($s) => $s->period_start >= $mStart && $s->period_start <= $mEnd);
+
+                $userSlips = $slips->where('user_id', $emp->id)
+                    ->filter(fn($sl) => $sl->date >= $mStart && $sl->date <= $mEnd);
+
+                $points = null;
+                $color = 'white';
+
+                if ($userScores->isNotEmpty()) {
+                    $points = (float) $userScores->sum('period_points_earned');
+                } elseif ($userSlips->isNotEmpty()) {
+                    $points = (float) $userSlips->sum('daily_points_earned');
+                }
+
+                if ($points !== null) {
+                    $pts = round($points);
+                    if ($pts >= 70) {
+                        $color = 'green';
+                    } elseif ($pts >= 50) {
+                        $color = 'yellow';
+                    } elseif ($pts > 0) {
+                        $color = 'red';
+                    } else {
+                        $color = 'grey';
+                    }
+
+                    $monthlyScores[$mKey] = [
+                        'points' => $pts,
+                        'color'  => $color,
+                    ];
+                    $validPoints[] = $pts;
+                } else {
+                    $monthlyScores[$mKey] = [
+                        'points' => null,
+                        'color'  => 'white',
+                    ];
+                }
+            }
+
+            // Total is Average score across months with data (matching client spreadsheet)
+            $avgScore = count($validPoints) > 0 ? (int) round(array_sum($validPoints) / count($validPoints)) : 0;
+            $sumScore = (int) round(array_sum($validPoints));
+
+            if ($avgScore >= 70) {
+                $totalColor = 'green';
+            } elseif ($avgScore >= 50) {
+                $totalColor = 'yellow';
+            } elseif ($avgScore > 0) {
+                $totalColor = 'red';
+            } else {
+                $totalColor = 'white';
+            }
+
+            $employeeRows[] = [
+                'id'           => $emp->id,
+                'name'         => $emp->name,
+                'role'         => $emp->roles->first()?->name ?? 'Staff',
+                'total'        => $avgScore,
+                'sum'          => $sumScore,
+                'total_color'  => $totalColor,
+                'months'       => $monthlyScores,
+            ];
+        }
+
+        // Sort descending by Total (average), then by Sum
+        usort($employeeRows, function ($a, $b) {
+            if ($b['total'] !== $a['total']) {
+                return $b['total'] <=> $a['total'];
+            }
+            return $b['sum'] <=> $a['sum'];
+        });
+
+        // Assign S No (1-indexed rank)
+        foreach ($employeeRows as $idx => &$row) {
+            $row['s_no'] = $idx + 1;
+        }
+        unset($row);
+
+        $roles = \Spatie\Permission\Models\Role::whereNotIn('name', ['admin', 'supervisor', 'Admin', 'Supervisor'])->get();
+
+        return [
+            'employees'      => $employeeRows,
+            'months'         => $visibleMonths,
+            'financial_year' => $fy,
+            'completed_only' => $completedOnly,
+            'available_fys'  => $availableFys,
+            'roles'          => $roles,
+            'selected_role'  => $request->role_id ? intval($request->role_id) : null,
+            'search'         => $request->search ?? '',
+        ];
+    }
+
+    /**
      * Format a metric value with proper units.
      */
     private function formatValue(float $value, $metric): string

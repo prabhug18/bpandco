@@ -60,6 +60,8 @@ Route::middleware('auth')->group(function () {
         Route::get('reports/greenscore', [ReportController::class, 'greenscore'])->name('reports.greenscore');
         Route::get('reports/attendance', [ReportController::class, 'attendance'])->name('reports.attendance');
         Route::get('reports/attendance/export', [ReportController::class, 'exportAttendanceExcel'])->name('reports.attendance.export');
+        Route::get('reports/monthly-summary', [ReportController::class, 'monthlySummary'])->name('reports.monthly-summary');
+        Route::get('reports/monthly-summary/export', [ReportController::class, 'exportMonthlySummaryExcel'])->name('reports.monthly-summary.export');
     });
 
     // Phase 6: Reports

@@ -110,6 +110,11 @@ watch(() => page.props.flash, (flash) => {
                                 <i class="bi bi-calendar-check"></i><span> Attendance Report</span>
                             </Link>
                         </li>
+                        <li v-if="$page.props.auth.user.permissions.includes('approve slips')">
+                            <Link :href="route('reports.monthly-summary')" :class="{ 'active': route().current('reports.monthly-summary') }">
+                                <i class="bi bi-calendar3-range"></i><span> Monthly Points Summary</span>
+                            </Link>
+                        </li>
                         <li v-if="$page.props.auth.user.permissions.includes('configure incentives')">
                             <Link :href="route('reports.incentives')" :class="{ 'active': route().current('reports.incentives') }">
                                 <i class="bi bi-cash-coin"></i><span> Incentive Payables</span>
