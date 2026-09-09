@@ -19,11 +19,11 @@ class ProductionMetricSeeder extends Seeder
         DB::beginTransaction();
 
         try {
-            // 1. Get or create the Production metric
+            // 1. Box production metric
             $metric = Metric::firstOrCreate(
                 ['key' => 'production'],
                 [
-                    'label' => 'Production',
+                    'label' => 'Box Production',
                     'unit' => 'Boxes',
                     'value_type' => 'absolute',
                     'scoring_type' => '10_20_30_days',
@@ -32,7 +32,7 @@ class ProductionMetricSeeder extends Seeder
                 ]
             );
 
-            // 2. Link metric to the Production role (Role ID: 7 based on earlier query)
+            // 2. Link metric to the Production role
             $productionRole = Role::where('name', 'Production')->first();
             
             if ($productionRole) {
@@ -44,10 +44,10 @@ class ProductionMetricSeeder extends Seeder
 
                 // 3. Seed Daily Scoring Tiers
                 $dailyTiers = [
-                    ['tier_label' => 'green',  'min_value' => 80, 'daily_points' => 0.66],
-                    ['tier_label' => 'yellow', 'min_value' => 60, 'daily_points' => 0.46],
-                    ['tier_label' => 'red',    'min_value' => 50, 'daily_points' => 0.33],
-                    ['tier_label' => 'grey',   'min_value' => 40, 'daily_points' => 0.20],
+                    ['tier_label' => 'green',  'min_value' => 15, 'daily_points' => 0.66],
+                    ['tier_label' => 'yellow', 'min_value' => 12, 'daily_points' => 0.46],
+                    ['tier_label' => 'red',    'min_value' => 10, 'daily_points' => 0.33],
+                    ['tier_label' => 'grey',   'min_value' => 7,  'daily_points' => 0.20],
                 ];
 
                 foreach ($dailyTiers as $tier) {
@@ -60,22 +60,22 @@ class ProductionMetricSeeder extends Seeder
                 // 4. Seed Period Targets
                 $periodTargets = [
                     // 10 Days
-                    ['period_type' => '10_days', 'tier_label' => 'green',  'min_value' => 800, 'points_awarded' => 6.6],
-                    ['period_type' => '10_days', 'tier_label' => 'yellow', 'min_value' => 600, 'points_awarded' => 4.6],
-                    ['period_type' => '10_days', 'tier_label' => 'red',    'min_value' => 500, 'points_awarded' => 3.3],
-                    ['period_type' => '10_days', 'tier_label' => 'grey',   'min_value' => 400, 'points_awarded' => 2],
+                    ['period_type' => '10_days', 'tier_label' => 'green',  'min_value' => 150, 'points_awarded' => 6.6],
+                    ['period_type' => '10_days', 'tier_label' => 'yellow', 'min_value' => 120, 'points_awarded' => 4.6],
+                    ['period_type' => '10_days', 'tier_label' => 'red',    'min_value' => 100, 'points_awarded' => 3.3],
+                    ['period_type' => '10_days', 'tier_label' => 'grey',   'min_value' => 70,  'points_awarded' => 2],
                     
                     // 20 Days
-                    ['period_type' => '20_days', 'tier_label' => 'green',  'min_value' => 1600, 'points_awarded' => 13.2],
-                    ['period_type' => '20_days', 'tier_label' => 'yellow', 'min_value' => 1200, 'points_awarded' => 9.2],
-                    ['period_type' => '20_days', 'tier_label' => 'red',    'min_value' => 1000, 'points_awarded' => 6.6],
-                    ['period_type' => '20_days', 'tier_label' => 'grey',   'min_value' => 800,  'points_awarded' => 4],
+                    ['period_type' => '20_days', 'tier_label' => 'green',  'min_value' => 300, 'points_awarded' => 13.2],
+                    ['period_type' => '20_days', 'tier_label' => 'yellow', 'min_value' => 240, 'points_awarded' => 9.2],
+                    ['period_type' => '20_days', 'tier_label' => 'red',    'min_value' => 200, 'points_awarded' => 6.6],
+                    ['period_type' => '20_days', 'tier_label' => 'grey',   'min_value' => 140, 'points_awarded' => 4],
 
                     // 30 Days
-                    ['period_type' => '30_days', 'tier_label' => 'green',  'min_value' => 2400, 'points_awarded' => 20],
-                    ['period_type' => '30_days', 'tier_label' => 'yellow', 'min_value' => 1800, 'points_awarded' => 14],
-                    ['period_type' => '30_days', 'tier_label' => 'red',    'min_value' => 1500, 'points_awarded' => 10],
-                    ['period_type' => '30_days', 'tier_label' => 'grey',   'min_value' => 1200, 'points_awarded' => 6],
+                    ['period_type' => '30_days', 'tier_label' => 'green',  'min_value' => 450, 'points_awarded' => 20],
+                    ['period_type' => '30_days', 'tier_label' => 'yellow', 'min_value' => 360, 'points_awarded' => 14],
+                    ['period_type' => '30_days', 'tier_label' => 'red',    'min_value' => 300, 'points_awarded' => 10],
+                    ['period_type' => '30_days', 'tier_label' => 'grey',   'min_value' => 210, 'points_awarded' => 6],
                 ];
 
                 foreach ($periodTargets as $target) {

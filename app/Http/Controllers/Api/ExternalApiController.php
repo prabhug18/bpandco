@@ -28,6 +28,14 @@ class ExternalApiController extends Controller
         'CUSTOMER_HANDLING' => 'customer_handling',
         'ITEMS_SOLD'      => 'old_stock_pu',
         'PRODUCTION'      => 'production',
+        'BOX'             => 'production',
+        'BOX_PRODUCTION'  => 'production',
+        'NC_THINNER_MIXING' => 'nc_thinner_mixing',
+        'NC_THINNER'      => 'nc_thinner_mixing',
+        'ENAMEL_THINNER_MIXING' => 'enamel_thinner_mixing',
+        'ENAMEL_THINNER'  => 'enamel_thinner_mixing',
+        'MIXING_THINNERS' => 'mixing_thinners',
+        'THINNERS_MIXING' => 'mixing_thinners',
         'DIRECT_COLLECTION' => 'direct_collection',
         'BP_LAC_PRODUCTS' => 'bplac_products',
         'STOCK_CHECKING'  => 'stock_checking',
@@ -170,6 +178,58 @@ class ExternalApiController extends Controller
                     'daily_points_earned' => $dailyPoints,
                     'slip_id'             => $slip->id,
                 ];
+            }
+
+            // If NC or Enamel thinner mixing was processed, aggregate total into mixing_thinners
+            $hasThinnerSync = collect($processedMetrics)->contains(
+                fn($m) => in_array($m['metric_code'], ['NC_THINNER_MIXING', 'ENAMEL_THINNER_MIXING'])
+            );
+            $alreadyHasMixing = collect($processedMetrics)->contains(
+                fn($m) => $m['metric_code'] === 'MIXING_THINNERS'
+            );
+
+            if ($hasThinnerSync && !$alreadyHasMixing) {
+                $ncSlip = Slip::where('user_id', $user->id)->where('date', $entryDate)
+                    ->whereHas('metric', fn($q) => $q->where('key', 'nc_thinner_mixing'))->first();
+                $enamelSlip = Slip::where('user_id', $user->id)->where('date', $entryDate)
+                    ->whereHas('metric', fn($q) => $q->where('key', 'enamel_thinner_mixing'))->first();
+
+                $mixingMetric = Metric::where('key', 'mixing_thinners')->first();
+                if ($mixingMetric) {
+                    $totalThinners = (float)($ncSlip?->value ?? 0) + (float)($enamelSlip?->value ?? 0);
+                    $thinnerPoints = 0;
+                    $mixingTiers = DailyScoringTier::where('metric_id', $mixingMetric->id)
+                        ->when($userRoleId, fn($q) => $q->where('role_id', $userRoleId))
+                        ->orderBy('min_value', 'desc')
+                        ->get();
+                    foreach ($mixingTiers as $t) {
+                        if ($totalThinners >= (float)$t->min_value) {
+                            $thinnerPoints = (float)$t->daily_points;
+                            break;
+                        }
+                    }
+                    $mixingSlip = Slip::updateOrCreate(
+                        [
+                            'user_id'   => $user->id,
+                            'metric_id' => $mixingMetric->id,
+                            'date'      => $entryDate,
+                        ],
+                        [
+                            'value'               => $totalThinners,
+                            'daily_points_earned' => $thinnerPoints,
+                            'status'              => $slipStatus,
+                            'reference_id'        => $referenceId,
+                            'approved_by'         => $autoApprove ? auth()->id() : null,
+                        ]
+                    );
+                    $slipsCreatedOrUpdated++;
+                    $processedMetrics[] = [
+                        'metric_code'         => 'MIXING_THINNERS',
+                        'value'               => $totalThinners,
+                        'daily_points_earned' => $thinnerPoints,
+                        'slip_id'             => $mixingSlip->id,
+                    ];
+                }
             }
 
             if (!empty($processedMetrics)) {
