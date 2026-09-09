@@ -38,26 +38,25 @@ class ProductionMetricSeeder extends Seeder
             if ($productionRole) {
                 $metric->roles()->syncWithoutDetaching([$productionRole->id]);
                 
-                // Clear existing tiers for this metric & role to avoid duplicates
-                DailyScoringTier::where('metric_id', $metric->id)->where('role_id', $productionRole->id)->delete();
-                PeriodTarget::where('metric_id', $metric->id)->where('role_id', $productionRole->id)->delete();
+                // Seed Daily Scoring Tiers only if none exist for this role
+                if (DailyScoringTier::where('metric_id', $metric->id)->where('role_id', $productionRole->id)->doesntExist()) {
+                    $dailyTiers = [
+                        ['tier_label' => 'green',  'min_value' => 15, 'daily_points' => 0.66],
+                        ['tier_label' => 'yellow', 'min_value' => 12, 'daily_points' => 0.46],
+                        ['tier_label' => 'red',    'min_value' => 10, 'daily_points' => 0.33],
+                        ['tier_label' => 'grey',   'min_value' => 7,  'daily_points' => 0.20],
+                    ];
 
-                // 3. Seed Daily Scoring Tiers
-                $dailyTiers = [
-                    ['tier_label' => 'green',  'min_value' => 15, 'daily_points' => 0.66],
-                    ['tier_label' => 'yellow', 'min_value' => 12, 'daily_points' => 0.46],
-                    ['tier_label' => 'red',    'min_value' => 10, 'daily_points' => 0.33],
-                    ['tier_label' => 'grey',   'min_value' => 7,  'daily_points' => 0.20],
-                ];
-
-                foreach ($dailyTiers as $tier) {
-                    DailyScoringTier::create(array_merge($tier, [
-                        'metric_id' => $metric->id,
-                        'role_id' => $productionRole->id,
-                    ]));
+                    foreach ($dailyTiers as $tier) {
+                        DailyScoringTier::create(array_merge($tier, [
+                            'metric_id' => $metric->id,
+                            'role_id' => $productionRole->id,
+                        ]));
+                    }
                 }
 
-                // 4. Seed Period Targets
+                // Seed Period Targets only if none exist for this role
+                if (PeriodTarget::where('metric_id', $metric->id)->where('role_id', $productionRole->id)->doesntExist()) {
                 $periodTargets = [
                     // 10 Days
                     ['period_type' => '10_days', 'tier_label' => 'green',  'min_value' => 150, 'points_awarded' => 6.6],
@@ -83,6 +82,7 @@ class ProductionMetricSeeder extends Seeder
                         'metric_id' => $metric->id,
                         'role_id' => $productionRole->id,
                     ]));
+                }
                 }
             }
 
