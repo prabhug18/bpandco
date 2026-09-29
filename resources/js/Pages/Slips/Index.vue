@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/vue3';
 import { ref, computed, watch, onMounted } from 'vue';
 import axios from 'axios';
+import Alert from '@/Utils/Alert';
 
 const props = defineProps({
     metrics:       Array,
@@ -158,65 +159,114 @@ const dynamicTotalThinners = computed(() => {
     return sum > 0 ? (sum % 1 === 0 ? sum : sum.toFixed(1)) : 0;
 });
 
-// Production Approval and Status checks
+// Production Slips & Computed Status
+const prodBoxSlip = computed(() => getSlipByKey('production'));
+const prodNCSlip = computed(() => getSlipByKey('nc_thinner_mixing'));
+const prodEnamelSlip = computed(() => getSlipByKey('enamel_thinner_mixing'));
+const prodMixingSlip = computed(() => getSlipByKey('mixing_thinners'));
+
+const hasProdEntry = computed(() => {
+    return !!(prodBoxSlip.value || prodNCSlip.value || prodEnamelSlip.value || prodMixingSlip.value);
+});
+
 const isProdApproved = computed(() => {
-    const boxSlip = getSlipByKey('production');
-    const mixingSlip = getSlipByKey('mixing_thinners');
-    return (boxSlip && boxSlip.status === 'approved') || (mixingSlip && mixingSlip.status === 'approved');
+    return (prodBoxSlip.value && prodBoxSlip.value.status === 'approved') || 
+           (prodMixingSlip.value && prodMixingSlip.value.status === 'approved');
 });
 
 const isProdPending = computed(() => {
-    const boxSlip = getSlipByKey('production');
-    const mixingSlip = getSlipByKey('mixing_thinners');
-    return (boxSlip && boxSlip.status === 'pending') || (mixingSlip && mixingSlip.status === 'pending');
+    return (prodBoxSlip.value && prodBoxSlip.value.status === 'pending') || 
+           (prodMixingSlip.value && prodMixingSlip.value.status === 'pending') ||
+           (prodNCSlip.value && prodNCSlip.value.status === 'pending') ||
+           (prodEnamelSlip.value && prodEnamelSlip.value.status === 'pending');
 });
 
 const isProdRejected = computed(() => {
-    const boxSlip = getSlipByKey('production');
-    const mixingSlip = getSlipByKey('mixing_thinners');
-    return (boxSlip && boxSlip.status === 'rejected') || (mixingSlip && mixingSlip.status === 'rejected');
+    return (prodBoxSlip.value && prodBoxSlip.value.status === 'rejected') || 
+           (prodMixingSlip.value && prodMixingSlip.value.status === 'rejected');
 });
 
 const prodRejectComment = computed(() => {
-    const boxSlip = getSlipByKey('production');
-    const mixingSlip = getSlipByKey('mixing_thinners');
-    return boxSlip?.comment || mixingSlip?.comment || '';
+    return prodBoxSlip.value?.comment || prodMixingSlip.value?.comment || prodNCSlip.value?.comment || prodEnamelSlip.value?.comment || '';
 });
 
-// Populate production form from existing slips
-const syncProdForm = () => {
-    const boxSlip = getSlipByKey('production');
-    const ncSlip = getSlipByKey('nc_thinner_mixing');
-    const enamelSlip = getSlipByKey('enamel_thinner_mixing');
+// Edit mode states (forms reset immediately on submit; only populate if user clicks Edit)
+const isEditingProd = ref(false);
+const isEditingSingle = ref(false);
 
-    prodForm.boxes = boxSlip ? (parseFloat(boxSlip.value) || '') : '';
-    prodForm.nc_thinner_ltr = ncSlip ? (parseFloat(ncSlip.value) || '') : '';
-    prodForm.enamel_thinner_ltr = enamelSlip ? (parseFloat(enamelSlip.value) || '') : '';
+// Reset forms to zero/empty
+const resetProdForm = () => {
+    prodForm.boxes = '';
+    prodForm.nc_thinner_ltr = '';
+    prodForm.enamel_thinner_ltr = '';
     prodForm.date = selectedDate.value;
+    prodPreview.value = { box_points: 0, thinner_points: 0, total_thinners: 0, total_points: 0 };
+    isEditingProd.value = false;
+};
 
+const resetSingleForm = (metricId) => {
+    form.reset('value');
+    form.value = '';
+    form.date = selectedDate.value;
+    if (metricId) {
+        pointsPreview.value[metricId] = null;
+    } else {
+        pointsPreview.value = {};
+    }
+    isEditingSingle.value = false;
+};
+
+// Populate production form from existing slips (only called on deliberate Edit Entry)
+const syncProdForm = () => {
+    prodForm.boxes = prodBoxSlip.value ? (parseFloat(prodBoxSlip.value.value) || '') : '';
+    prodForm.nc_thinner_ltr = prodNCSlip.value ? (parseFloat(prodNCSlip.value.value) || '') : '';
+    prodForm.enamel_thinner_ltr = prodEnamelSlip.value ? (parseFloat(prodEnamelSlip.value.value) || '') : '';
+    prodForm.date = selectedDate.value;
     fetchProdPreview();
 };
 
-// Watchers
-watch([activeTab, selectedDate], ([newTab, newDate]) => {
-    form.value = '';
-    pointsPreview.value[newTab] = null;
-    if (isProductionUser.value) {
-        syncProdForm();
-    }
-}, { immediate: true });
+const startEditProd = () => {
+    isEditingProd.value = true;
+    syncProdForm();
+};
 
-watch(() => props.existingSlips, () => {
-    if (isProductionUser.value) {
-        syncProdForm();
+const cancelEditProd = () => {
+    resetProdForm();
+};
+
+// Standard Metric Helpers
+const activeMetric = computed(() => props.metrics.find(m => m.id === activeTab.value));
+const currentSlip = computed(() => activeMetric.value ? getSlip(activeMetric.value.id) : null);
+const isSingleApproved = computed(() => currentSlip.value?.status === 'approved');
+const isSinglePending  = computed(() => currentSlip.value?.status === 'pending');
+const isSingleRejected = computed(() => currentSlip.value?.status === 'rejected');
+const hasSingleEntry   = computed(() => !!currentSlip.value);
+
+const startEditSingle = () => {
+    isEditingSingle.value = true;
+    if (currentSlip.value) {
+        form.value = parseFloat(currentSlip.value.value) || '';
+        if (activeMetric.value) {
+            onValueChange(form.value, activeMetric.value.id);
+        }
     }
-}, { deep: true });
+};
+
+const cancelEditSingle = () => {
+    resetSingleForm(activeMetric.value?.id);
+};
 
 const isApproved = (metricId) => getSlip(metricId)?.status === 'approved';
 const isPending  = (metricId) => getSlip(metricId)?.status === 'pending';
 const isRejected = (metricId) => getSlip(metricId)?.status === 'rejected';
 
-const activeMetric = computed(() => props.metrics.find(m => m.id === activeTab.value));
+// Watchers: Always reset forms to empty/zero on tab or date change
+watch([activeTab, selectedDate], ([newTab, newDate]) => {
+    resetSingleForm(newTab);
+    resetProdForm();
+    prodForm.date = newDate;
+    form.date = newDate;
+}, { immediate: true });
 
 // Submit standard single slip
 const submitSlip = (metricId) => {
@@ -224,7 +274,10 @@ const submitSlip = (metricId) => {
     form.date      = selectedDate.value;
     form.post(route('slips.store'), {
         preserveScroll: true,
-        onSuccess: () => { form.reset('value'); pointsPreview.value[metricId] = null; },
+        onSuccess: () => {
+            resetSingleForm(metricId);
+            Alert.success('Submitted', 'Slip submitted successfully! Field has been reset to zero.');
+        },
     });
 };
 
@@ -234,7 +287,8 @@ const submitProdForm = () => {
     prodForm.post(route('slips.store'), {
         preserveScroll: true,
         onSuccess: () => {
-            fetchProdPreview();
+            resetProdForm();
+            Alert.success('Submitted', 'Production slips submitted successfully! Fields have been reset to zero.');
         },
     });
 };
@@ -345,6 +399,86 @@ const formatValue = (val) => {
                                     <p class="text-muted small mb-0">Record boxes produced & thinner mixing litres</p>
                                 </div>
 
+                                <!-- Today's Submitted Entry Summary Card -->
+                                <div v-if="hasProdEntry" class="card border-0 shadow-sm mb-3 rounded-4 overflow-hidden text-start" 
+                                     :class="{
+                                         'bg-warning-subtle border border-warning': isProdPending,
+                                         'bg-success-subtle border border-success': isProdApproved,
+                                         'bg-danger-subtle border border-danger': isProdRejected
+                                     }">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold small text-uppercase d-flex align-items-center gap-1"
+                                                  :class="{'text-warning-emphasis': isProdPending, 'text-success': isProdApproved, 'text-danger': isProdRejected}">
+                                                <i class="bi" :class="{
+                                                    'bi-hourglass-split': isProdPending,
+                                                    'bi-patch-check-fill': isProdApproved,
+                                                    'bi-exclamation-octagon-fill': isProdRejected
+                                                }"></i>
+                                                <span>{{ isProdApproved ? 'Verified & Locked Slip' : (isProdPending ? 'Submitted Entry (Pending Approval)' : 'Entry Rejected') }}</span>
+                                            </span>
+                                            <span class="badge rounded-pill px-2.5 py-1"
+                                                  :class="{
+                                                      'bg-warning text-dark': isProdPending,
+                                                      'bg-success text-white': isProdApproved,
+                                                      'bg-danger text-white': isProdRejected
+                                                  }">
+                                                {{ prodBoxSlip?.status?.toUpperCase() || prodMixingSlip?.status?.toUpperCase() }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Submitted values row -->
+                                        <div class="row g-2 text-center my-1">
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded-3 border">
+                                                    <div class="text-muted" style="font-size: 0.65rem;">BOXES</div>
+                                                    <div class="fw-bold text-dark fs-6">{{ prodBoxSlip ? parseFloat(prodBoxSlip.value) : 0 }}</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded-3 border">
+                                                    <div class="text-muted" style="font-size: 0.65rem;">NC THINNER</div>
+                                                    <div class="fw-bold text-dark fs-6">{{ prodNCSlip ? parseFloat(prodNCSlip.value) : 0 }} <span style="font-size:0.65rem;">L</span></div>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded-3 border">
+                                                    <div class="text-muted" style="font-size: 0.65rem;">ENAMEL</div>
+                                                    <div class="fw-bold text-dark fs-6">{{ prodEnamelSlip ? parseFloat(prodEnamelSlip.value) : 0 }} <span style="font-size:0.65rem;">L</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="border-color: rgba(0,0,0,0.08) !important;">
+                                            <div class="small" style="font-size: 0.75rem;">
+                                                <span v-if="isProdPending && !isEditingProd" class="text-warning-emphasis">
+                                                    <i class="bi bi-info-circle me-1"></i>Input fields below reset to 0.
+                                                </span>
+                                                <span v-else-if="isEditingProd" class="text-primary fw-bold">
+                                                    <i class="bi bi-pencil-fill me-1"></i>Edit mode active.
+                                                </span>
+                                                <span v-else-if="isProdApproved" class="text-success">
+                                                    <i class="bi bi-shield-check me-1"></i>Slip verified & locked.
+                                                </span>
+                                                <span v-else-if="isProdRejected" class="text-danger">
+                                                    <i class="bi bi-x-circle me-1"></i>{{ prodRejectComment }}
+                                                </span>
+                                            </div>
+
+                                            <div v-if="isProdPending && !isEditingProd">
+                                                <button type="button" class="btn btn-sm btn-outline-primary px-3 py-0.5 rounded-pill fw-bold" style="font-size: 0.75rem;" @click="startEditProd">
+                                                    <i class="bi bi-pencil-square me-1"></i>Edit Entry
+                                                </button>
+                                            </div>
+                                            <div v-else-if="isEditingProd">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-0.5 rounded-pill fw-bold" style="font-size: 0.75rem;" @click="cancelEditProd">
+                                                    <i class="bi bi-x-circle me-1"></i>Cancel Edit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="production-fields-card p-3 rounded-4 mb-3 border shadow-xs" style="background: #ffffff;">
                                     
                                     <!-- 1. Box Production -->
@@ -364,8 +498,8 @@ const formatValue = (val) => {
                                         <div class="input-group">
                                             <input type="number" step="0.01" min="0"
                                                 class="form-control form-control-lg glass-input-field"
-                                                placeholder="Enter Boxes produced"
-                                                :disabled="isProdApproved"
+                                                :placeholder="isProdPending && !isEditingProd ? 'Submitted & Reset to 0' : 'Enter Boxes produced'"
+                                                :disabled="isProdApproved || (isProdPending && !isEditingProd)"
                                                 v-model="prodForm.boxes"
                                                 @input="fetchProdPreview"
                                                 autocomplete="off">
@@ -387,8 +521,8 @@ const formatValue = (val) => {
                                         <div class="input-group">
                                             <input type="number" step="0.01" min="0"
                                                 class="form-control form-control-lg glass-input-field"
-                                                placeholder="Enter NC Thinner (Ltr)"
-                                                :disabled="isProdApproved"
+                                                :placeholder="isProdPending && !isEditingProd ? 'Submitted & Reset to 0' : 'Enter NC Thinner (Ltr)'"
+                                                :disabled="isProdApproved || (isProdPending && !isEditingProd)"
                                                 v-model="prodForm.nc_thinner_ltr"
                                                 @input="fetchProdPreview"
                                                 autocomplete="off">
@@ -408,8 +542,8 @@ const formatValue = (val) => {
                                         <div class="input-group">
                                             <input type="number" step="0.01" min="0"
                                                 class="form-control form-control-lg glass-input-field"
-                                                placeholder="Enter Enamel Thinner (Ltr)"
-                                                :disabled="isProdApproved"
+                                                :placeholder="isProdPending && !isEditingProd ? 'Submitted & Reset to 0' : 'Enter Enamel Thinner (Ltr)'"
+                                                :disabled="isProdApproved || (isProdPending && !isEditingProd)"
                                                 v-model="prodForm.enamel_thinner_ltr"
                                                 @input="fetchProdPreview"
                                                 autocomplete="off">
@@ -453,11 +587,23 @@ const formatValue = (val) => {
                                     </span>
                                 </div>
 
-                                <button type="submit" class="btn btn-primary premium-submit-btn w-100 py-2.5 mb-2" 
-                                    :disabled="prodForm.processing || isProdApproved">
-                                    <i class="bi bi-send-check me-2" v-if="!prodForm.processing"></i>
-                                    <span v-else class="spinner-border spinner-border-sm me-2"></span>
-                                    {{ isProdApproved ? 'LOCKED (APPROVED)' : 'SUBMIT PRODUCTION SLIPS' }}
+                                <button type="submit" class="btn premium-submit-btn w-100 py-2.5 mb-2" 
+                                    :class="{
+                                        'btn-secondary opacity-75': (isProdPending && !isEditingProd) || isProdApproved,
+                                        'btn-primary': !((isProdPending && !isEditingProd) || isProdApproved)
+                                    }"
+                                    :disabled="prodForm.processing || isProdApproved || (isProdPending && !isEditingProd)">
+                                    <i class="bi bi-send-check me-2" v-if="!prodForm.processing && !isProdPending && !isProdApproved && !isEditingProd"></i>
+                                    <i class="bi bi-lock-fill me-2" v-else-if="!prodForm.processing && isProdApproved"></i>
+                                    <i class="bi bi-hourglass-split me-2" v-else-if="!prodForm.processing && isProdPending && !isEditingProd"></i>
+                                    <i class="bi bi-arrow-repeat me-2" v-else-if="!prodForm.processing && isEditingProd"></i>
+                                    <span v-else-if="prodForm.processing" class="spinner-border spinner-border-sm me-2"></span>
+
+                                    <span v-if="isProdApproved">LOCKED (APPROVED)</span>
+                                    <span v-else-if="isProdPending && !isEditingProd">SUBMITTED (AWAITING APPROVAL)</span>
+                                    <span v-else-if="isEditingProd">UPDATE PRODUCTION SLIPS</span>
+                                    <span v-else-if="isProdRejected">RESUBMIT PRODUCTION SLIPS</span>
+                                    <span v-else>SUBMIT PRODUCTION SLIPS</span>
                                 </button>
 
                                 <div v-if="Object.keys(prodForm.errors).length > 0" class="alert alert-danger p-2 small mb-2 text-start">
@@ -470,8 +616,11 @@ const formatValue = (val) => {
                                     <p v-if="isProdApproved" class="text-success fw-bold mb-0">
                                         <i class="bi bi-patch-check-fill me-1"></i> This entry has been verified and locked.
                                     </p>
-                                    <p v-else-if="isProdPending" class="text-warning fw-bold mb-0">
-                                        <i class="bi bi-hourglass-split me-1"></i> Submitted & awaiting supervisor approval.
+                                    <p v-else-if="isProdPending && !isEditingProd" class="text-warning fw-bold mb-0">
+                                        <i class="bi bi-hourglass-split me-1"></i> Submitted & awaiting supervisor approval. Input fields have been reset to 0.
+                                    </p>
+                                    <p v-else-if="isEditingProd" class="text-primary fw-bold mb-0">
+                                        <i class="bi bi-pencil-square me-1"></i> Editing pending entry. Click Update or Cancel.
                                     </p>
                                     <p v-else-if="isProdRejected" class="text-danger fw-bold mb-0">
                                         <i class="bi bi-exclamation-octagon-fill me-1"></i> Rejected: {{ prodRejectComment }}
@@ -488,16 +637,81 @@ const formatValue = (val) => {
                                     <i class="bi fs-3 text-primary" :class="metricIcon(activeMetric.label)"></i>
                                 </div>
                                 <h5 class="fw-bold title-font text-uppercase mb-3 mt-1">{{ activeMetric.label }}</h5>
+
+                                <!-- Today's Submitted Single Metric Entry Summary Card -->
+                                <div v-if="hasSingleEntry" class="card border-0 shadow-sm mb-3 rounded-4 overflow-hidden text-start"
+                                     :class="{
+                                         'bg-warning-subtle border border-warning': isSinglePending,
+                                         'bg-success-subtle border border-success': isSingleApproved,
+                                         'bg-danger-subtle border border-danger': isSingleRejected
+                                     }">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold small text-uppercase d-flex align-items-center gap-1"
+                                                  :class="{'text-warning-emphasis': isSinglePending, 'text-success': isSingleApproved, 'text-danger': isSingleRejected}">
+                                                <i class="bi" :class="{
+                                                    'bi-hourglass-split': isSinglePending,
+                                                    'bi-patch-check-fill': isSingleApproved,
+                                                    'bi-exclamation-octagon-fill': isSingleRejected
+                                                }"></i>
+                                                <span>{{ isSingleApproved ? 'Verified & Locked Slip' : (isSinglePending ? 'Submitted Entry (Pending Approval)' : 'Entry Rejected') }}</span>
+                                            </span>
+                                            <span class="badge rounded-pill px-2.5 py-1"
+                                                  :class="{
+                                                      'bg-warning text-dark': isSinglePending,
+                                                      'bg-success text-white': isSingleApproved,
+                                                      'bg-danger text-white': isSingleRejected
+                                                  }">
+                                                {{ currentSlip?.status?.toUpperCase() }}
+                                            </span>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center p-2.5 bg-white rounded-3 border my-1">
+                                            <div class="text-muted small fw-semibold">{{ activeMetric.label }}</div>
+                                            <div class="fw-bold text-dark fs-6">
+                                                {{ parseFloat(currentSlip.value) }} <span class="text-muted small">{{ activeMetric.unit }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style="border-color: rgba(0,0,0,0.08) !important;">
+                                            <div class="small" style="font-size: 0.75rem;">
+                                                <span v-if="isSinglePending && !isEditingSingle" class="text-warning-emphasis">
+                                                    <i class="bi bi-info-circle me-1"></i>Input field below reset to 0.
+                                                </span>
+                                                <span v-else-if="isEditingSingle" class="text-primary fw-bold">
+                                                    <i class="bi bi-pencil-fill me-1"></i>Edit mode active.
+                                                </span>
+                                                <span v-else-if="isSingleApproved" class="text-success">
+                                                    <i class="bi bi-shield-check me-1"></i>Slip verified & locked.
+                                                </span>
+                                                <span v-else-if="isSingleRejected" class="text-danger">
+                                                    <i class="bi bi-x-circle me-1"></i>{{ currentSlip?.comment }}
+                                                </span>
+                                            </div>
+
+                                            <div v-if="isSinglePending && !isEditingSingle">
+                                                <button type="button" class="btn btn-sm btn-outline-primary px-3 py-0.5 rounded-pill fw-bold" style="font-size: 0.75rem;" @click="startEditSingle">
+                                                    <i class="bi bi-pencil-square me-1"></i>Edit Entry
+                                                </button>
+                                            </div>
+                                            <div v-else-if="isEditingSingle">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-0.5 rounded-pill fw-bold" style="font-size: 0.75rem;" @click="cancelEditSingle">
+                                                    <i class="bi bi-x-circle me-1"></i>Cancel Edit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 
                                 <div class="position-relative mb-3">
                                     <input type="number" step="0.01" min="0"
                                         class="glass-input-big text-center"
-                                        :placeholder="'Enter ' + activeMetric.unit"
-                                        :disabled="isApproved(activeMetric.id)"
+                                        :placeholder="isSinglePending && !isEditingSingle ? 'Submitted (Reset to 0)' : 'Enter ' + activeMetric.unit"
+                                        :disabled="isSingleApproved || (isSinglePending && !isEditingSingle)"
                                         v-model="form.value"
                                         @input="onValueChange(form.value, activeMetric.id)"
                                         autocomplete="off"
-                                        required>
+                                        :required="!isSinglePending || isEditingSingle">
                                     
                                     <!-- Points Preview Bubble -->
                                     <div v-if="pointsPreview[activeMetric.id]" class="points-badge fadeIn">
@@ -505,11 +719,23 @@ const formatValue = (val) => {
                                     </div>
                                 </div>
 
-                                <button type="submit" class="btn btn-primary premium-submit-btn w-100 py-2 mb-2" 
-                                    :disabled="form.processing || isApproved(activeMetric.id)">
-                                    <i class="bi bi-send-check me-2" v-if="!form.processing"></i>
-                                    <span v-else class="spinner-border spinner-border-sm me-2"></span>
-                                    {{ isApproved(activeMetric.id) ? 'LOCKED' : 'SUBMIT' }}
+                                <button type="submit" class="btn premium-submit-btn w-100 py-2 mb-2" 
+                                    :class="{
+                                        'btn-secondary opacity-75': (isSinglePending && !isEditingSingle) || isSingleApproved,
+                                        'btn-primary': !((isSinglePending && !isEditingSingle) || isSingleApproved)
+                                    }"
+                                    :disabled="form.processing || isSingleApproved || (isSinglePending && !isEditingSingle)">
+                                    <i class="bi bi-send-check me-2" v-if="!form.processing && !isSinglePending && !isSingleApproved && !isEditingSingle"></i>
+                                    <i class="bi bi-lock-fill me-2" v-else-if="!form.processing && isSingleApproved"></i>
+                                    <i class="bi bi-hourglass-split me-2" v-else-if="!form.processing && isSinglePending && !isEditingSingle"></i>
+                                    <i class="bi bi-arrow-repeat me-2" v-else-if="!form.processing && isEditingSingle"></i>
+                                    <span v-else-if="form.processing" class="spinner-border spinner-border-sm me-2"></span>
+
+                                    <span v-if="isSingleApproved">LOCKED (APPROVED)</span>
+                                    <span v-else-if="isSinglePending && !isEditingSingle">SUBMITTED (AWAITING APPROVAL)</span>
+                                    <span v-else-if="isEditingSingle">UPDATE SLIP</span>
+                                    <span v-else-if="isSingleRejected">RESUBMIT SLIP</span>
+                                    <span v-else>SUBMIT</span>
                                 </button>
 
                                 <div v-if="Object.keys(form.errors).length > 0" class="alert alert-danger p-2 small mb-2 text-start">
@@ -519,16 +745,19 @@ const formatValue = (val) => {
                                 </div>
 
                                 <div class="alert-box small">
-                                    <p v-if="isApproved(activeMetric.id)" class="text-success fw-bold">
+                                    <p v-if="isSingleApproved" class="text-success fw-bold mb-0">
                                         <i class="bi bi-patch-check-fill me-1"></i> This entry has been verified and locked.
                                     </p>
-                                    <p v-else-if="isPending(activeMetric.id)" class="text-warning fw-bold">
-                                        <i class="bi bi-hourglass-split me-1"></i> Submitted & awaiting supervisor approval.
+                                    <p v-else-if="isSinglePending && !isEditingSingle" class="text-warning fw-bold mb-0">
+                                        <i class="bi bi-hourglass-split me-1"></i> Submitted & awaiting supervisor approval. Input field has been reset to 0.
                                     </p>
-                                    <p v-else-if="isRejected(activeMetric.id)" class="text-danger fw-bold">
-                                        <i class="bi bi-exclamation-octagon-fill me-1"></i> Rejected: {{ getSlip(activeMetric.id)?.comment }}
+                                    <p v-else-if="isEditingSingle" class="text-primary fw-bold mb-0">
+                                        <i class="bi bi-pencil-square me-1"></i> Editing pending entry. Click Update or Cancel.
                                     </p>
-                                    <p v-else class="text-muted"><i class="bi bi-info-circle me-1"></i> Only one submission allowed per day.</p>
+                                    <p v-else-if="isSingleRejected" class="text-danger fw-bold mb-0">
+                                        <i class="bi bi-exclamation-octagon-fill me-1"></i> Rejected: {{ currentSlip?.comment }}
+                                    </p>
+                                    <p v-else class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i> Only one submission allowed per day.</p>
                                 </div>
                             </form>
                         </div>
