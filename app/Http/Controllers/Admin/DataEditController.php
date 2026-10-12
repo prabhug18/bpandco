@@ -199,6 +199,33 @@ class DataEditController extends Controller
             );
         }
 
+        // 2.1 Sync mixing_thinners if NC or Enamel thinner metrics are involved
+        $ncMetric     = Metric::where('key', 'nc_thinner_mixing')->first();
+        $enamelMetric = Metric::where('key', 'enamel_thinner_mixing')->first();
+        $mixMetric    = Metric::where('key', 'mixing_thinners')->first();
+
+        if ($mixMetric && ($ncMetric || $enamelMetric)) {
+            $hasNC     = $ncMetric && array_key_exists($ncMetric->id, $request->metrics);
+            $hasEnamel = $enamelMetric && array_key_exists($enamelMetric->id, $request->metrics);
+
+            if ($hasNC || $hasEnamel) {
+                $ncSlip     = $ncMetric ? Slip::where('user_id', $userId)->where('metric_id', $ncMetric->id)->where('date', $dateStr)->first() : null;
+                $enamelSlip = $enamelMetric ? Slip::where('user_id', $userId)->where('metric_id', $enamelMetric->id)->where('date', $dateStr)->first() : null;
+
+                $totalMixing = (float)($ncSlip?->value ?? 0) + (float)($enamelSlip?->value ?? 0);
+
+                if ($totalMixing > 0) {
+                    $mPoints = $this->calculateDailyPoints($mixMetric, $totalMixing, $roleId, $userId, $dateStr);
+                    Slip::updateOrCreate(
+                        ['user_id' => $userId, 'metric_id' => $mixMetric->id, 'date' => $dateStr],
+                        ['value' => $totalMixing, 'daily_points_earned' => $mPoints, 'status' => 'approved']
+                    );
+                } else {
+                    Slip::where('user_id', $userId)->where('metric_id', $mixMetric->id)->where('date', $dateStr)->delete();
+                }
+            }
+        }
+
         // 3. Recalculate Monthly Score
         \App\Services\ScoringService::updateMonthScores($user, $dateStr);
 

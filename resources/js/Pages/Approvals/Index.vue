@@ -193,9 +193,24 @@ const bulkRejectAtt = () => {
                                         </td>
                                         <td class="fw-bold">{{ slip.user.name }}</td>
                                         <td class="text-secondary fw-semibold">{{ new Date(slip.date).toLocaleDateString() }}</td>
-                                        <td>{{ slip.metric.label }}</td>
+                                        <td>
+                                            <span class="fw-semibold">{{ slip.metric.label }}</span>
+                                            <div v-if="['nc_thinner_mixing', 'enamel_thinner_mixing'].includes(slip.metric.key)" class="badge bg-info-subtle text-info-emphasis border border-info-subtle d-block mt-1 w-auto text-wrap" style="font-size: 0.7rem; max-width: 150px;">
+                                                Part of Total Thinners
+                                            </div>
+                                        </td>
                                         <td><span class="badge bg-light text-dark fw-bold border p-2">{{ slip.value }} {{ slip.metric.unit }}</span></td>
-                                        <td><span class="text-primary fw-bold" style="font-size: 1.1em;">+ {{ slip.daily_points_earned }} pts</span></td>
+                                        <td>
+                                            <div v-if="slip.combined_thinner_points !== undefined">
+                                                <span class="text-success fw-bold" style="font-size: 1.05em;">
+                                                    + {{ Number(slip.combined_thinner_points).toFixed(2) }} pts
+                                                </span>
+                                                <div class="small text-muted" style="font-size: 0.75rem;">
+                                                    Combined Thinners ({{ slip.combined_thinner_litres }} Ltr)
+                                                </div>
+                                            </div>
+                                            <span v-else class="text-primary fw-bold" style="font-size: 1.1em;">+ {{ slip.daily_points_earned }} pts</span>
+                                        </td>
                                         <td class="text-end pe-4">
                                             <div class="btn-group shadow-sm rounded-pill overflow-hidden">
                                                 <button class="btn btn-sm btn-success px-3 fw-bold" @click="approveSlip(slip)">Approve</button>
